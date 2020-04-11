@@ -1,0 +1,29 @@
+{
+    // MUST HAVE A PARAMS FILE OR LINKED TEMPLATES DON'T GET VERIFIED   
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "functions": [],
+    "variables": {},
+    "resources": [
+        {
+            "name": "linkedDeployment1",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2019-10-01",
+            "properties": { 
+                "mode": "Incremental",
+                "templateLink": { //asdf relative link
+                    "uri": "[concat('./', '/linkedTemplates/linkedTemplate.json')]",
+                    //"uri": "linkedTemplates/linkedTemplate.json",
+                    "contentVersion": "1.0.0.0" //asdf testcase: if these don't match
+                }, 
+                "parameters": {   
+                    "p1": {//asdf why isn't this an error?
+                        "type": "string" //asdf obj ref error editing in here when invalid
+                    }
+                }
+            }
+        }
+    ],
+    "outputs": {} 
+}

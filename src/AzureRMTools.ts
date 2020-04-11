@@ -130,6 +130,7 @@ export class AzureRMTools {
     private readonly _deploymentDocuments: Map<string, DeploymentDocument> = new Map<string, DeploymentDocument>();
     private readonly _filesAskedToUpdateSchemaThisSession: Set<string> = new Set<string>();
     private readonly _paramsStatusBarItem: vscode.StatusBarItem;
+    private readonly _fullValidationStatusBarItem: vscode.StatusBarItem;
     private _areDeploymentTemplateEventsHookedUp: boolean = false;
     private _diagnosticsVersion: number = 0;
     private _mapping: DeploymentFileMapping = ext.deploymentFileMapping.value;
@@ -149,6 +150,20 @@ export class AzureRMTools {
             backgroundColor: "rgba(128, 128, 128, 0.1)"
         }
     });
+
+    /*asdf
+    private readonly _linkContextDecorationType: vscode.TextEditorDecorationType = vscode.window.createTextEditorDecorationType({
+        // borderWidth: "1px",
+        // borderStyle: "solid",
+        // light: {
+        //     borderColor: "rgba(0, 0, 0, 0.2)",
+        //     backgroundColor: "rgba(0, 0, 0, 0.05)"
+        // },
+        // dark: {
+        //     borderColor: "rgba(128, 128, 128, 0.5)",
+        //     backgroundColor: "rgba(128, 128, 128, 0.1)"
+        // }
+    });*/
 
     // tslint:disable-next-line: max-func-body-length
     constructor(context: vscode.ExtensionContext) {
@@ -296,6 +311,8 @@ export class AzureRMTools {
 
         this._paramsStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left);
         ext.context.subscriptions.push(this._paramsStatusBarItem);
+        this._fullValidationStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left);
+        ext.context.subscriptions.push(this._fullValidationStatusBarItem);
 
         vscode.window.onDidChangeActiveTextEditor(this.onActiveTextEditorChanged, this, context.subscriptions);
         vscode.workspace.onDidOpenTextDocument(this.onDocumentOpened, this, context.subscriptions);
@@ -395,6 +412,7 @@ export class AzureRMTools {
         // We want a normalized file path to use as key, but also need to differentiate documents with different URI schemes
         return `${documentUri.scheme}|${normalizePath(documentUri)}`;
     }
+
     // Add the deployment doc to our list of opened deployment docs
     private setOpenedDeploymentDocument(documentUri: vscode.Uri, deploymentDocument: DeploymentDocument | undefined): void {
         assert(documentUri);
@@ -439,6 +457,9 @@ export class AzureRMTools {
         // TODO: refactor
         // tslint:disable-next-line: cyclomatic-complexity max-func-body-length
         callWithTelemetryAndErrorHandlingSync('updateDeploymentDocument', (actionContext: IActionContext): void => {
+            // tslint:disable-next-line: no-console
+            console.log(`updateOpenedDocument: ${textDocument.uri}`);
+
             actionContext.errorHandling.suppressDisplay = true;
             actionContext.telemetry.suppressIfSuccessful = true;
             actionContext.telemetry.properties.isActivationEvent = 'true';
@@ -488,6 +509,50 @@ export class AzureRMTools {
                             // The document will be reloaded, firing this event again with the new langid
                             AzureRMTools.setLanguageToArm(textDocument, actionContext);
                             return;
+                        }
+                    }
+
+                    //const startColor1 = "#c0c000";
+                    // const startColor2 = "rgb(50,192,50)";
+                    // const endColor = "#D8D8E080";
+                    const margin = "0 0 0 1em";
+
+                    if (editor && editor.document === textDocument) {
+                        // Link context decorations
+                        {
+                            const options1: vscode.DecorationOptions[] = [];
+
+                            const startPos = deploymentTemplate.getDocumentPosition(0);
+                            const hoverMessage = new vscode.MarkdownString();
+                            hoverMessage.appendMarkdown("### Main template: [main.json](command:azurerm-vscode-tools.openTemplateFile)\n");
+                            hoverMessage.appendMarkdown("... [linkedTemplate1.json] linked from [main.json:873](command:azurerm-vscode-tools.openTemplateFile)  \n");
+                            hoverMessage.appendMarkdown("... [linkedTemplate2.json] linked from [linkedTemplate1.json:471](command:azurerm-vscode-tools.openTemplateFile)  \n");
+                            hoverMessage.appendMarkdown("... This file linked from [linkedTemplate2.json:128](command:azurerm-vscode-tools.openTemplateFile)  \n");
+                            hoverMessage.isTrusted = true;
+
+                            options1.push({
+                                range: new vscode.Range(startPos.line, Number.MAX_SAFE_INTEGER, startPos.line, Number.MAX_SAFE_INTEGER),
+                                //hoverMessage: new vscode.MarkdownString("This  \nis the  \nfull<br>call\ntree"),
+                                hoverMessage: hoverMessage,
+                                renderOptions: {
+                                    after: {
+                                        color: "#e0e0e0",
+                                        contentText: `Linked from /User/whoever/repo/vscode-azuretools/templates/linked-templates/main.json:873`,
+                                        fontStyle: "italic",
+                                        //margin: "22em  22em 0 0 ",
+                                        //height: "200px",
+                                        //width: "25px",
+                                        //backgroundColor: "blue",
+                                        //borderColor: "red",
+                                        border: "outset",
+                                        borderColor: "#4080C0",
+                                        margin: margin
+
+                                    }
+                                }
+                            });
+
+                            //asdf editor.setDecorations(this._linkContextDecorationType, options1);
                         }
                     }
 
@@ -990,7 +1055,8 @@ export class AzureRMTools {
     }
 
     private async updateEditorState(): Promise<void> {
-        let show = false;
+        let statusBarText: string | undefined;
+        let fullValidationOn: boolean | undefined;
         let isTemplateFile = false;
         let templateFileHasParamFile = false;
         let isParamFile = false;
@@ -1001,28 +1067,28 @@ export class AzureRMTools {
             if (activeDocument) {
                 const deploymentTemplate = this.getOpenedDeploymentDocument(activeDocument);
                 if (deploymentTemplate instanceof DeploymentTemplateDoc) {
-                    show = true;
                     isTemplateFile = true;
-                    let statusBarText: string;
 
                     const paramFileUri = this._mapping.getParameterFile(activeDocument.uri);
                     if (paramFileUri) {
                         templateFileHasParamFile = true;
                         const doesParamFileExist = await pathExists(paramFileUri);
                         statusBarText = `Parameter file: ${getFriendlyPathToFile(paramFileUri)}`;
+                        fullValidationOn = true;
                         if (!doesParamFileExist) {
                             statusBarText += " $(error) Not found";
+                            fullValidationOn = false;
                         }
                     } else {
                         statusBarText = "Select/Create Parameter File...";
+                        fullValidationOn = false;
                     }
 
                     this._paramsStatusBarItem.command = "azurerm-vscode-tools.selectParameterFile";
                     this._paramsStatusBarItem.text = statusBarText;
                 } else if (deploymentTemplate instanceof DeploymentParametersDoc) {
-                    show = true;
+                    // Current file is a parameter file
                     isParamFile = true;
-                    let statusBarText: string;
 
                     const templateFileUri = this._mapping.getTemplateFile(activeDocument.uri);
                     if (templateFileUri) {
@@ -1041,7 +1107,17 @@ export class AzureRMTools {
                 }
             }
         } finally {
-            if (show) {
+            if (fullValidationOn === true) {
+                this._fullValidationStatusBarItem.text = "Full template validation on";
+                this._fullValidationStatusBarItem.show();
+            } else if (fullValidationOn === false) {
+                this._fullValidationStatusBarItem.text = "$(warning) Full template validation off";
+                this._fullValidationStatusBarItem.show();
+            } else {
+                this._fullValidationStatusBarItem.hide();
+            }
+
+            if (statusBarText) {
                 this._paramsStatusBarItem.show();
             } else {
                 this._paramsStatusBarItem.hide();
@@ -1667,14 +1743,16 @@ export class AzureRMTools {
     }
 
     private onDocumentChanged(event: vscode.TextDocumentChangeEvent): void {
-        this.updateOpenedDocument(event.document);
+        //asdf this.updateOpenedDocument(event.document);
     }
 
     private onDocumentOpened(openedDocument: vscode.TextDocument): void {
+        //asdf console.warn(`${new Date()} Opened: ${openedDocument.uri}`);
         this.updateOpenedDocument(openedDocument);
     }
 
     private onDocumentClosed(closedDocument: vscode.TextDocument): void {
+        console.warn(`${new Date()} Closed: ${closedDocument.uri}`);
         callWithTelemetryAndErrorHandlingSync('onDocumentClosed', (actionContext: IActionContext): void => {
             actionContext.telemetry.properties.isActivationEvent = 'true';
             actionContext.telemetry.suppressIfSuccessful = true;

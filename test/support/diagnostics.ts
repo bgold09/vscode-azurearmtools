@@ -14,9 +14,9 @@ const DEBUG_BREAK_AFTER_DIAGNOSTICS_COMPLETE = false;
 // tslint:disable:no-non-null-assertion
 
 import * as assert from "assert";
-import * as fs from 'fs';
+import * as fse from "fs-extra";
 import * as path from 'path';
-import { Diagnostic, DiagnosticSeverity, Disposable, languages, Position, Range, TextDocument } from "vscode";
+import { Diagnostic, DiagnosticSeverity, Disposable, languages, Position, Range, TextDocument, Uri } from "vscode";
 import { backendValidationDiagnosticsSource, diagnosticsCompletePrefix, expressionsDiagnosticsSource, ExpressionType, ext, LanguageServerState, languageServerStateSource } from "../../extension.bundle";
 import { DISABLE_LANGUAGE_SERVER } from "../testConstants";
 import { delay } from "./delay";
@@ -28,7 +28,7 @@ import { stringify } from "./stringify";
 import { TempDocument, TempEditor, TempFile } from "./TempFile";
 import { testLog } from "./testLog";
 
-export const diagnosticsTimeout = 2 * 60 * 1000; // CONSIDER: Use this long timeout only for first test, or for suite setup
+export const diagnosticsTimeout = 20 * 60 * 1000; // CONSIDER: Use this long timeout only for first test, or for suite setup
 
 enum ExpectedDiagnosticSeverity {
     Warning = 4,
@@ -218,6 +218,8 @@ export interface IPartialDeploymentTemplateResource {
 
 // tslint:disable-next-line:no-empty-interface
 export interface ITestDiagnosticsOptions extends IGetDiagnosticsOptions {
+    // If specified, wait for a diagnostic to match the following substring between continuing with checks
+    waitForDiagnosticSubstring?: string;
 }
 
 export interface IGetDiagnosticsOptions {
@@ -265,16 +267,35 @@ export interface IGetDiagnosticsOptions {
 }
 
 export async function testDiagnosticsFromFile(filePath: string | Partial<IDeploymentTemplate>, options: ITestDiagnosticsOptions, expected: ExpectedDiagnostics): Promise<void> {
-    await testDiagnosticsCore(filePath, 1, options, expected);
+    await testDiagnosticsCore(async () => await getDiagnosticsForTemplate(filePath, 1, options), options, expected);
 }
 
 export async function testDiagnostics(templateContentsOrFileName: string | Partial<IDeploymentTemplate>, options: ITestDiagnosticsOptions, expected: ExpectedDiagnostics): Promise<void> {
-    await testDiagnosticsCore(templateContentsOrFileName, 1, options, expected);
+    await testDiagnosticsCore(async () => await getDiagnosticsForTemplate(templateContentsOrFileName, 1, options), options, expected);
 }
 
-async function testDiagnosticsCore(templateContentsOrFileName: string | Partial<IDeploymentTemplate>, expectedMinimumVersionForEachSource: number, options: ITestDiagnosticsOptions, expected: ExpectedDiagnostics): Promise<void> {
-    let actual: IDiagnosticsResults = await getDiagnosticsForTemplate(templateContentsOrFileName, expectedMinimumVersionForEachSource, options);
+async function testDiagnosticsCore(getDiagnostics: () => Promise<IDiagnosticsResults>, options: ITestDiagnosticsOptions, expected: ExpectedDiagnostics): Promise<void> {
+    let actual: IDiagnosticsResults;
+    // tslint:disable-next-line: no-constant-condition
+    while (true) {
+        actual = await getDiagnostics();
+        if (options.waitForDiagnosticSubstring) {
+            if (actual.diagnostics.some(d => d.message.includes(options.waitForDiagnosticSubstring!))) {
+                break;
+            }
+
+            await delay(100);
+        } else {
+            break;
+        }
+    }
+
     compareDiagnostics(actual.diagnostics, expected, options);
+
+}
+
+export async function testDiagnosticsFromUri(documentUri: Uri, options: ITestDiagnosticsOptions, expected: ExpectedDiagnostics): Promise<void> {
+    await testDiagnosticsCore(async () => await getDiagnosticsForDocument(documentUri, 1, options), options, expected);
 }
 
 export interface IDiagnosticsResults {
@@ -283,11 +304,13 @@ export interface IDiagnosticsResults {
 }
 
 export async function getDiagnosticsForDocument(
-    document: TextDocument,
+    document: TextDocument | Uri,
     expectedMinimumVersionForEachSource: number,
     options: IGetDiagnosticsOptions,
     previousResults?: IDiagnosticsResults // If specified, will wait until the versions change and are completed
 ): Promise<IDiagnosticsResults> {
+    const documentUri = document instanceof Uri ? document : document.uri;
+
     let dispose: Disposable | undefined;
     let timer: NodeJS.Timer | undefined;
 
@@ -313,7 +336,7 @@ export async function getDiagnosticsForDocument(
         function getCurrentDiagnostics(): IDiagnosticsResults {
             const sourceCompletionVersions: { [source: string]: number } = {};
 
-            currentDiagnostics = languages.getDiagnostics(document.uri);
+            currentDiagnostics = languages.getDiagnostics(documentUri);
 
             // Filter out any language server state diagnostics
             currentDiagnostics = currentDiagnostics.filter(d => d.source !== languageServerStateSource);
@@ -430,13 +453,11 @@ export async function getDiagnosticsForTemplate(
     options?: IGetDiagnosticsOptions
 ): Promise<IDiagnosticsResults> {
     let templateContents: string | undefined;
-    let tempPathSuffix: string = '';
     let templateFile: TempFile | undefined;
     let paramsFile: TempFile | undefined;
     let editor: TempEditor | undefined;
 
     try {
-
         // tslint:disable-next-line: strict-boolean-expressions
         options = options || {};
 
@@ -444,39 +465,50 @@ export async function getDiagnosticsForTemplate(
             if (!!templateContentsOrFileName.match(/\.jsonc?$/)) {
                 // It's a filename
                 let sourcePath = resolveInTestFolder(templateContentsOrFileName);
-                templateContents = fs.readFileSync(sourcePath).toString();
-                tempPathSuffix = path.basename(templateContentsOrFileName, path.extname(templateContentsOrFileName));
+                templateFile = TempFile.fromExistingFile(sourcePath);
             } else {
-                // It's a string
-                templateContents = templateContentsOrFileName;
+                // It's a content string
+                templateContentsOrFileName = templateContentsOrFileName;
             }
         } else {
             // It's a (flying?) object
-            let templateObject: Partial<IDeploymentTemplate> = templateContentsOrFileName;
+            const templateObject: Partial<IDeploymentTemplate> = templateContentsOrFileName;
             templateContents = stringify(templateObject);
         }
 
-        // Add schema if not already present (to make it easier to write tests)
-        if (!options.doNotAddSchema && !templateContents.includes('$schema')) {
-            templateContents = templateContents.replace(/\s*{\s*/, '{\n"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",\n');
+        if (!templateFile) {
+            assert(templateContents);
+            // Add schema if not already present (to make it easier to write tests)
+            if (!options.doNotAddSchema && !templateContents.includes('$schema')) {
+                templateContents = templateContents.replace(/\s*{\s*/, '{\n"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",\n');
+            }
+
+            if (options.search) {
+                let newContents = templateContents.replace(options.search, options.replace!);
+                templateContents = newContents;
+            }
+
+            templateFile = TempFile.fromContents(templateContents, '.json');
         }
 
-        if (options.search) {
-            let newContents = templateContents.replace(options.search, options.replace!);
-            templateContents = newContents;
-        }
-
-        templateFile = new TempFile(templateContents, tempPathSuffix);
         const document = new TempDocument(templateFile);
 
         // Parameter file
         if (options.parameters || options.parametersFile) {
             if (options.parameters) {
                 const { unmarkedText: unmarkedParams } = await parseParametersWithMarkers(options.parameters);
-                paramsFile = new TempFile(unmarkedParams);
+                paramsFile = TempFile.fromContents(unmarkedParams);
             } else {
-                const absPath = resolveInTestFolder(options.parametersFile!);
-                paramsFile = await TempFile.fromExistingFile(absPath);
+                assert(options.parametersFile);
+
+                // First try relative to the template file
+                let absPath: string = path.join(path.dirname(templateFile.fsPath), options.parametersFile);
+                if (!fse.pathExistsSync(absPath)) {
+                    absPath = resolveInTestFolder(options.parametersFile!);
+                }
+
+                assert(fse.pathExistsSync(absPath), `Couldn't find parameter file ${absPath}`);
+                paramsFile = TempFile.fromExistingFile(absPath);
             }
 
             // Map template to params
