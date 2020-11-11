@@ -27,6 +27,10 @@ export async function onRequestOpenLinkedFile({ sourceTemplateUri, requestedLink
     //asdf what return?
     try {
         await callWithTelemetryAndErrorHandling('onRequetOpenLinkedFile', async () => { //asdf error handling
+
+            // e.g. 'https://fake/public-ip.json?link%3D0'
+            const contextId: string | undefined = (requestedLinkResolvedUriWithId.match(/link%3d([0-9]+$)/i) ?? [])[1];
+
             //asdf how properly handle paths like /proj/c#/file.txt?
             const sourceTemplatePathAsUri: Uri = Uri.parse(sourceTemplateUri, true); //asdf? what if not file:// ?
             const requestedLinkPathAsUri: Uri = Uri.parse(requestedLinkResolvedUri, true); //asdf? what if not file:// ?   // e.g. 'file:///Users/stephenweatherford/repos/vscode-azurearmtools/test/templates/linkedTemplates/parent-child//linkedTemplates/linkedTemplate.json?linked=%2FUsers%2Fstephenweatherford%2Frepos%2Fvscode-azurearmtools%2Ftest%2Ftemplates%2FlinkedTemplates%2Fparent-child%2FmainTemplate.json'
@@ -72,6 +76,7 @@ export async function tryLoadLinkedFile(uri: Uri): Promise<void> {
                 // tslint:disable-next-line: no-console
                 console.log(`... Opened: ${doc.uri}`);
                 ext.outputChannel.appendLine(`... Succeeded loading (or is already loaded) ${uri}`); //asdf
+                await window.showTextDocument(doc);
             });
         //asdf What if it's JSON?  Will auto language switch kick in?
     } catch (err) {
