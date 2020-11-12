@@ -6,7 +6,7 @@
 import * as fse from 'fs-extra';
 import * as os from 'os';
 import * as path from 'path';
-import { Diagnostic, Position, ProgressLocation, Range, Uri, window, workspace } from 'vscode';
+import { Diagnostic, ProgressLocation, Uri, window, workspace } from 'vscode';
 import { callWithTelemetryAndErrorHandling, callWithTelemetryAndErrorHandlingSync, IActionContext, parseError } from 'vscode-azureextensionui';
 import { LanguageClient, LanguageClientOptions, RevealOutputChannelOn, ServerOptions } from 'vscode-languageclient';
 import { acquireSharedDotnetInstallation } from '../acquisition/acquireSharedDotnetInstallation';
@@ -138,14 +138,14 @@ export async function startLanguageClient(serverDllPath: string, dotnetExePath: 
                 handleDiagnostics: (uri: Uri, diagnostics: Diagnostic[], _next: (uri: Uri, diagnostics: Diagnostic[]) => void): void => {
                     let a = 1;
                     a = a;
-                    diagnostics.push(
-                        {
-                            message: `hi from middleware for ${uri.toString()}`,
-                            range: new Range(new Position(0, 0), new Position(0, 0)),
-                            severity: 0,
-                            source: "source"
-                        }
-                    );
+                    // diagnostics.push(
+                    //     {
+                    //         message: `hi from middleware for ${uri.toString()}`,
+                    //         range: new Range(new Position(0, 0), new Position(0, 0)),
+                    //         severity: 0,
+                    //         source: "source"
+                    //     }
+                    // );
                     _next(uri, diagnostics);
                 }
             }
