@@ -131,6 +131,7 @@ export class AzureRMTools {
     private readonly _deploymentDocuments: Map<string, DeploymentDocument> = new Map<string, DeploymentDocument>();
     private readonly _filesAskedToUpdateSchemaThisSession: Set<string> = new Set<string>();
     private readonly _paramsStatusBarItem: vscode.StatusBarItem;
+    private readonly _fullValidationStatusBarItem: vscode.StatusBarItem;
     private _areDeploymentTemplateEventsHookedUp: boolean = false;
     private _diagnosticsVersion: number = 0;
     private _mapping: DeploymentFileMapping = ext.deploymentFileMapping.value;
@@ -288,6 +289,8 @@ export class AzureRMTools {
 
         this._paramsStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left);
         ext.context.subscriptions.push(this._paramsStatusBarItem);
+        this._fullValidationStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left);
+        ext.context.subscriptions.push(this._fullValidationStatusBarItem);
 
         vscode.window.onDidChangeActiveTextEditor(this.onActiveTextEditorChanged, this, context.subscriptions);
         vscode.workspace.onDidOpenTextDocument(this.onDocumentOpened, this, context.subscriptions);
@@ -1024,7 +1027,8 @@ export class AzureRMTools {
     }
 
     private async updateEditorState(): Promise<void> {
-        let show = false;
+        let statusBarText: string | undefined;
+        let fullValidationOn: boolean | undefined;
         let isTemplateFile = false;
         let templateFileHasParamFile = false;
         let isParamFile = false;
@@ -1035,28 +1039,28 @@ export class AzureRMTools {
             if (activeDocument) {
                 const deploymentTemplate = this.getOpenedDeploymentDocument(activeDocument);
                 if (deploymentTemplate instanceof DeploymentTemplateDoc) {
-                    show = true;
                     isTemplateFile = true;
-                    let statusBarText: string;
 
                     const paramFileUri = this._mapping.getParameterFile(activeDocument.uri);
                     if (paramFileUri) {
                         templateFileHasParamFile = true;
                         const doesParamFileExist = await pathExists(paramFileUri);
                         statusBarText = `Parameter file: ${getFriendlyPathToFile(paramFileUri)}`;
+                        fullValidationOn = true;
                         if (!doesParamFileExist) {
                             statusBarText += " $(error) Not found";
+                            fullValidationOn = false;
                         }
                     } else {
                         statusBarText = "Select/Create Parameter File...";
+                        fullValidationOn = false;
                     }
 
                     this._paramsStatusBarItem.command = "azurerm-vscode-tools.selectParameterFile";
                     this._paramsStatusBarItem.text = statusBarText;
                 } else if (deploymentTemplate instanceof DeploymentParametersDoc) {
-                    show = true;
+                    // Current file is a parameter file
                     isParamFile = true;
-                    let statusBarText: string;
 
                     const templateFileUri = this._mapping.getTemplateFile(activeDocument.uri);
                     if (templateFileUri) {
@@ -1075,7 +1079,17 @@ export class AzureRMTools {
                 }
             }
         } finally {
-            if (show) {
+            if (fullValidationOn === true) {
+                this._fullValidationStatusBarItem.text = "Full template validation on";
+                this._fullValidationStatusBarItem.show();
+            } else if (fullValidationOn === false) {
+                this._fullValidationStatusBarItem.text = "$(warning) Full template validation off";
+                this._fullValidationStatusBarItem.show();
+            } else {
+                this._fullValidationStatusBarItem.hide();
+            }
+
+            if (statusBarText) {
                 this._paramsStatusBarItem.show();
             } else {
                 this._paramsStatusBarItem.hide();

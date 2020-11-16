@@ -8,7 +8,19 @@ import { callWithTelemetryAndErrorHandling, parseError } from "vscode-azureexten
 import { ext } from "./extensionVariables";
 import { assert } from './fixed_assert';
 
-export interface IRequestOpenLinkedFileArgs {
+export interface IRequestOpenLinkedFileInputs {
+    sourceTemplateUri: string;
+    requestedLinkUri: string;
+    requestedLinkResolvedUri: string;
+    //requestId: string;
+    requestedLinkResolvedUriWithId: string;
+}
+
+export interface IRequestOpenLinkedFileReturn {
+    errorMessage: string;
+}
+
+export interface INotifyTemplateGraph {
     sourceTemplateUri: string;
     requestedLinkUri: string;
     requestedLinkResolvedUri: string;
@@ -21,7 +33,7 @@ export interface IRequestOpenLinkedFileArgs {
  * @param sourceTemplateUri The full URI of the template which contains the link
  * @param requestedLinkPath The full URI of the resolved link being requested
  */
-export async function onRequestOpenLinkedFile({ sourceTemplateUri, requestedLinkResolvedUri, requestedLinkResolvedUriWithId }: IRequestOpenLinkedFileArgs): Promise<string | undefined> { //asdf returns error message
+export async function onRequestOpenLinkedFile({ sourceTemplateUri, requestedLinkResolvedUri, requestedLinkResolvedUriWithId }: IRequestOpenLinkedFileInputs): Promise<string | undefined> { //asdf returns error message
     //asdf do we try to keep this file around for a while???
 
     //asdf what return?
@@ -29,7 +41,7 @@ export async function onRequestOpenLinkedFile({ sourceTemplateUri, requestedLink
         await callWithTelemetryAndErrorHandling('onRequetOpenLinkedFile', async () => { //asdf error handling
 
             // e.g. 'https://fake/public-ip.json?link%3D0'
-            const contextId: string | undefined = (requestedLinkResolvedUriWithId.match(/link%3d([0-9]+$)/i) ?? [])[1];
+            const contextId: string | undefined = (requestedLinkResolvedUriWithId.match(/link%3d([0-9]+$)/i) ?? [])[1]; //asdf
 
             //asdf how properly handle paths like /proj/c#/file.txt?
             const sourceTemplatePathAsUri: Uri = Uri.parse(sourceTemplateUri, true); //asdf? what if not file:// ?

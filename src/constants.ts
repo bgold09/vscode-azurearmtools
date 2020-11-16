@@ -52,7 +52,8 @@ export namespace configKeys {
 }
 
 export namespace notifications {
-    export const openLinkedTemplate = 'arm-template/openLinkedFile';
+    export const requestOpenLinkedTemplate = 'arm-template/requestOpenLinkedTemplate';
+    export const notifyTemplateGraph = 'arm-template/notifyTemplateGraph';
 }
 
 export namespace globalStateKeys {
