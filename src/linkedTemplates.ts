@@ -8,7 +8,7 @@ import { callWithTelemetryAndErrorHandling, parseError } from "vscode-azureexten
 import { ext } from "./extensionVariables";
 import { assert } from './fixed_assert';
 
-export interface IRequestOpenLinkedFileInputs {
+export interface IRequestOpenLinkedFileArgs {
     sourceTemplateUri: string;
     requestedLinkUri: string;
     requestedLinkResolvedUri: string;
@@ -20,12 +20,27 @@ export interface IRequestOpenLinkedFileReturn {
     errorMessage: string;
 }
 
-export interface INotifyTemplateGraph {
-    sourceTemplateUri: string;
-    requestedLinkUri: string;
-    requestedLinkResolvedUri: string;
-    //requestId: string;
-    requestedLinkResolvedUriWithId: string;
+//asdf
+// enum PathType {
+//     templateLink = 0,
+//     templateRelativeLink = 1,
+//     parametersLink = 2,
+// }
+
+interface ILinkedTemplate {
+    id: string; // Guid
+    fullPath: Uri;
+    lineNumber: number;
+    columnNumber: number;
+    //asdf pathType: PathType;
+    parameters: { [key: string]: unknown };
+    //asdf parentContext: ILinkedTemplateContext;
+}
+
+// tslint:disable-next-line: no-empty-interface asdf
+export interface INotifyTemplateGraphArgs {
+    rootTemplateUri: Uri;
+    linkedTemplates: ILinkedTemplate[];
 }
 
 /**
@@ -33,7 +48,7 @@ export interface INotifyTemplateGraph {
  * @param sourceTemplateUri The full URI of the template which contains the link
  * @param requestedLinkPath The full URI of the resolved link being requested
  */
-export async function onRequestOpenLinkedFile({ sourceTemplateUri, requestedLinkResolvedUri, requestedLinkResolvedUriWithId }: IRequestOpenLinkedFileInputs): Promise<string | undefined> { //asdf returns error message
+export async function onRequestOpenLinkedFile({ sourceTemplateUri, requestedLinkResolvedUri, requestedLinkResolvedUriWithId }: IRequestOpenLinkedFileArgs): Promise<string | undefined> { //asdf returns error message
     //asdf do we try to keep this file around for a while???
 
     //asdf what return?
@@ -50,7 +65,8 @@ export async function onRequestOpenLinkedFile({ sourceTemplateUri, requestedLink
             assert(path.isAbsolute(sourceTemplatePathAsUri.fsPath), "Internal error: sourceTemplateUri should be an absolute path");
             assert(path.isAbsolute(requestedLinkPathAsUri.fsPath), "Internal error: requestedLinkUri should be an absolute path");
 
-            const uri = Uri.parse(requestedLinkResolvedUriWithId); //asdf (= converted to %3D)
+            // const uri = Uri.parse(requestedLinkResolvedUriWithId); //asdf (= converted to %3D)
+            const uri = requestedLinkPathAsUri;
             ext.outputChannel.appendLine(`Opening linked file "${uri}" in editor (linked from "${sourceTemplatePathAsUri.fsPath}")`);
 
             //asdf what if get multiple requests immediately?  do we care?
@@ -67,11 +83,16 @@ export async function onRequestOpenLinkedFile({ sourceTemplateUri, requestedLink
 
 // asdf what if file can't be loaded?  When do we try again?
 
+export async function onNotifyTemplateGraph(args: INotifyTemplateGraphArgs): Promise<void> {
+    ext.outputChannel.appendLine(`onNotifyTemplateGraph:`); //asdf
+    ext.outputChannel.appendLog(JSON.stringify(args, undefined, 4));
+}
+
 /**
  * Attempts to load the given file into a text document in VS Code so that
  * it will get sent to the language server.
  */
-export async function tryLoadLinkedFile(uri: Uri): Promise<void> {
+async function tryLoadLinkedFile(uri: Uri): Promise<void> {
     //asdf
     //await callWithTelemetryAndErrorHandling('tryLoadLinkedFile', async (actionContext: IActionContext) => { //asdf error handling
     try {
@@ -88,7 +109,7 @@ export async function tryLoadLinkedFile(uri: Uri): Promise<void> {
                 // tslint:disable-next-line: no-console
                 console.log(`... Opened: ${doc.uri}`);
                 ext.outputChannel.appendLine(`... Succeeded loading (or is already loaded) ${uri}`); //asdf
-                await window.showTextDocument(doc);
+                //asdf await window.showTextDocument(doc);
             });
         //asdf What if it's JSON?  Will auto language switch kick in?
     } catch (err) {

@@ -14,7 +14,7 @@ import { armTemplateLanguageId, configKeys, configPrefix, downloadDotnetVersion,
 import { templateDocumentSelector } from '../documents/templates/supported';
 import { ext } from '../extensionVariables';
 import { assert } from '../fixed_assert';
-import { IRequestOpenLinkedFileInputs, onRequestOpenLinkedFile } from '../linkedTemplates';
+import { INotifyTemplateGraphArgs, IRequestOpenLinkedFileArgs, onNotifyTemplateGraph, onRequestOpenLinkedFile } from '../linkedTemplates';
 import { WrappedErrorHandler } from './WrappedErrorHandler';
 
 const languageServerDllName = 'Microsoft.ArmLanguageServer.dll';
@@ -188,8 +188,11 @@ export async function startLanguageClient(serverDllPath: string, dotnetExePath: 
             await client.onReady();
             ext.languageServerClient = client;
 
-            client.onRequest(notifications.requestOpenLinkedTemplate, async (args: IRequestOpenLinkedFileInputs) => {
+            client.onRequest(notifications.requestOpenLinkedTemplate, async (args: IRequestOpenLinkedFileArgs) => {
                 return onRequestOpenLinkedFile(args);
+            });
+            client.onNotification(notifications.notifyTemplateGraph, async (args: INotifyTemplateGraphArgs) => {
+                return onNotifyTemplateGraph(args);
             });
         } catch (error) {
             throw new Error(
