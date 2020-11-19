@@ -152,6 +152,7 @@ export class AzureRMTools {
         }
     });
 
+    /*asdf
     private readonly _linkContextDecorationType: vscode.TextEditorDecorationType = vscode.window.createTextEditorDecorationType({
         // borderWidth: "1px",
         // borderStyle: "solid",
@@ -163,7 +164,7 @@ export class AzureRMTools {
         //     borderColor: "rgba(128, 128, 128, 0.5)",
         //     backgroundColor: "rgba(128, 128, 128, 0.1)"
         // }
-    });
+    });*/
 
     // tslint:disable-next-line: max-func-body-length
     constructor(context: vscode.ExtensionContext) {
@@ -530,7 +531,7 @@ export class AzureRMTools {
                                 }
                             });
 
-                            editor.setDecorations(this._linkContextDecorationType, options1);
+                            //asdf editor.setDecorations(this._linkContextDecorationType, options1);
                         }
                     }
 
