@@ -1,5 +1,6 @@
 {
-    // Simple link, no errors
+    // one level, no validation errors, child in subfolder
+
     "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
     "contentVersion": "1.0.0.0",
     "parameters": {},
@@ -12,8 +13,8 @@
             "apiVersion": "2019-10-01",
             "properties": {
                 "mode": "Incremental",
-                "templateLink": { //asdf relative link
-                    "relativePath": "[concat('subfolder', '/', 'child.json')]"
+                "templateLink": {
+                    "relativePath": "subfolder/child.json"
                 }
             }
         }

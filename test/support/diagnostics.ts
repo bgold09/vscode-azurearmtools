@@ -14,9 +14,9 @@ const DEBUG_BREAK_AFTER_DIAGNOSTICS_COMPLETE = false;
 // tslint:disable:no-non-null-assertion
 
 import * as assert from "assert";
-import * as fs from 'fs';
-import * as path from 'path';
-import { Diagnostic, DiagnosticSeverity, Disposable, languages, Position, Range, TextDocument } from "vscode";
+import * as fse from "fs-extra";
+import * as path from "path";
+import { Diagnostic, DiagnosticSeverity, Disposable, languages, Position, Range, TextDocument, Uri } from "vscode";
 import { diagnosticsCompletePrefix, expressionsDiagnosticsSource, ExpressionType, ext, LanguageServerState, languageServerStateSource } from "../../extension.bundle";
 import { DISABLE_LANGUAGE_SERVER } from "../testConstants";
 import { delay } from "./delay";
@@ -267,17 +267,24 @@ async function testDiagnosticsCore(templateContentsOrFileName: string | Partial<
     compareDiagnostics(actual.diagnostics, expected, options);
 }
 
+export async function testDiagnosticsFromUri(documentUri: Uri, options: ITestDiagnosticsOptions, expected: ExpectedDiagnostics): Promise<void> {
+    let actual: IDiagnosticsResults = await getDiagnosticsForDocument(documentUri, 1, options);
+    compareDiagnostics(actual.diagnostics, expected, options);
+}
+
 export interface IDiagnosticsResults {
     diagnostics: Diagnostic[];
     sourceCompletionVersions: { [source: string]: number };
 }
 
 export async function getDiagnosticsForDocument(
-    document: TextDocument,
+    document: TextDocument | Uri,
     expectedMinimumVersionForEachSource: number,
     options: IGetDiagnosticsOptions,
     previousResults?: IDiagnosticsResults // If specified, will wait until the versions change and are completed
 ): Promise<IDiagnosticsResults> {
+    const documentUri = document instanceof Uri ? document : document.uri;
+
     let dispose: Disposable | undefined;
     let timer: NodeJS.Timer | undefined;
 
@@ -303,7 +310,7 @@ export async function getDiagnosticsForDocument(
         function getCurrentDiagnostics(): IDiagnosticsResults {
             const sourceCompletionVersions: { [source: string]: number } = {};
 
-            currentDiagnostics = languages.getDiagnostics(document.uri);
+            currentDiagnostics = languages.getDiagnostics(documentUri);
 
             // Filter out any language server state diagnostics
             currentDiagnostics = currentDiagnostics.filter(d => d.source !== languageServerStateSource);
@@ -420,13 +427,11 @@ export async function getDiagnosticsForTemplate(
     options?: IGetDiagnosticsOptions
 ): Promise<IDiagnosticsResults> {
     let templateContents: string | undefined;
-    let tempPathSuffix: string = '';
     let templateFile: TempFile | undefined;
     let paramsFile: TempFile | undefined;
     let editor: TempEditor | undefined;
 
     try {
-
         // tslint:disable-next-line: strict-boolean-expressions
         options = options || {};
 
@@ -434,39 +439,50 @@ export async function getDiagnosticsForTemplate(
             if (!!templateContentsOrFileName.match(/\.jsonc?$/)) {
                 // It's a filename
                 let sourcePath = resolveInTestFolder(templateContentsOrFileName);
-                templateContents = fs.readFileSync(sourcePath).toString();
-                tempPathSuffix = path.basename(templateContentsOrFileName, path.extname(templateContentsOrFileName));
+                templateFile = TempFile.fromExistingFile(sourcePath);
             } else {
-                // It's a string
-                templateContents = templateContentsOrFileName;
+                // It's a content string
+                templateContentsOrFileName = templateContentsOrFileName;
             }
         } else {
             // It's a (flying?) object
-            let templateObject: Partial<IDeploymentTemplate> = templateContentsOrFileName;
+            const templateObject: Partial<IDeploymentTemplate> = templateContentsOrFileName;
             templateContents = stringify(templateObject);
         }
 
-        // Add schema if not already present (to make it easier to write tests)
-        if (!options.doNotAddSchema && !templateContents.includes('$schema')) {
-            templateContents = templateContents.replace(/\s*{\s*/, '{\n"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",\n');
+        if (!templateFile) {
+            assert(templateContents);
+            // Add schema if not already present (to make it easier to write tests)
+            if (!options.doNotAddSchema && !templateContents.includes('$schema')) {
+                templateContents = templateContents.replace(/\s*{\s*/, '{\n"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",\n');
+            }
+
+            if (options.search) {
+                let newContents = templateContents.replace(options.search, options.replace!);
+                templateContents = newContents;
+            }
+
+            templateFile = TempFile.fromContents(templateContents, '.json');
         }
 
-        if (options.search) {
-            let newContents = templateContents.replace(options.search, options.replace!);
-            templateContents = newContents;
-        }
-
-        templateFile = new TempFile(templateContents, tempPathSuffix);
         const document = new TempDocument(templateFile);
 
         // Parameter file
         if (options.parameters || options.parametersFile) {
             if (options.parameters) {
                 const { unmarkedText: unmarkedParams } = await parseParametersWithMarkers(options.parameters);
-                paramsFile = new TempFile(unmarkedParams);
+                paramsFile = TempFile.fromContents(unmarkedParams);
             } else {
-                const absPath = resolveInTestFolder(options.parametersFile!);
-                paramsFile = await TempFile.fromExistingFile(absPath);
+                assert(options.parametersFile);
+
+                // First try relative to the template file
+                let absPath: string = path.join(path.dirname(templateFile.fsPath), options.parametersFile);
+                if (!fse.pathExistsSync(absPath)) {
+                    absPath = resolveInTestFolder(options.parametersFile!);
+                }
+
+                assert(fse.pathExistsSync(absPath), `Couldn't find parameter file ${absPath}`);
+                paramsFile = TempFile.fromExistingFile(absPath);
             }
 
             // Map template to params

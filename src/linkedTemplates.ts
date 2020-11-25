@@ -130,7 +130,7 @@ async function tryOpenLinkedFile(localPath: string, pathType: PathType): Promise
 
                 // No errors
                 return undefined;
-            } catch (err: unknown) {
+            } catch (err) {
                 ext.outputChannel.appendLine(`... Failed loading ${localPath}: ${parseError(err).message}`);
                 return <PossibleError>err; //asdf what UI experience? put in error list?  asdf wrap error
             }
