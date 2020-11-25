@@ -100,7 +100,7 @@ type PossibleError = Partial<Error>; //asdf move
  * Attempts to load the given file into a text document in VS Code so that
  * it will get sent to the language server.
  */
-async function tryOpenLinkedFile(localPath: string, pathType: PathType): Promise<Partial<Error> | undefined> {
+async function tryOpenLinkedFile(localPath: string, pathType: PathType): Promise<PossibleError | undefined> {
     //asdf
     //await callWithTelemetryAndErrorHandling('tryLoadLinkedFile', async (actionContext: IActionContext) => { //asdf error handling
     return await window.withProgress<PossibleError | undefined>(//asdf?
@@ -109,10 +109,6 @@ async function tryOpenLinkedFile(localPath: string, pathType: PathType): Promise
             title: `Loading linked file ${localPath}`
         },
         async (): Promise<PossibleError | undefined> => {
-            // Note: If the URI is already opened, returns the existing document
-            // tslint:disable-next-line: prefer-template
-            //uri = Uri.parse(uri.fsPath + "?a");
-
             try {
                 // Check first if the path exists, so we get a better error message if not
                 if (!(await pathExists(localPath))) {
@@ -126,19 +122,18 @@ async function tryOpenLinkedFile(localPath: string, pathType: PathType): Promise
                 }
 
                 // Load into a text document (this does not cause the document to be shown)
+                // Note: If the URI is already opened, this returns the existing document
                 const doc = await workspace.openTextDocument(localPath);
                 // tslint:disable-next-line: no-console asdf
                 console.log(`... Opened: ${doc.uri}`);
+                ext.outputChannel.appendLine(`... Opened linked file ${localPath}`);
+
+                // No errors
+                return undefined;
             } catch (err: unknown) {
                 ext.outputChannel.appendLine(`... Failed loading ${localPath}: ${parseError(err).message}`);
                 return <PossibleError>err; //asdf what UI experience? put in error list?  asdf wrap error
             }
-
-            ext.outputChannel.appendLine(`... Succeeded loading (or is already loaded) ${localPath}`); //asdf
-            //asdf await window.showTextDocument(doc);
-
-            // No errors
-            return undefined;
         }
     );
 
