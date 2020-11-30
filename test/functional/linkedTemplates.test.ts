@@ -6,18 +6,39 @@
 
 import * as assert from "assert";
 import { Uri } from "vscode";
-import { ExpectedDiagnostics, testDiagnostics, testDiagnosticsFromUri } from "../support/diagnostics";
+import { ExpectedDiagnostics, IExpectedDiagnostic, testDiagnostics, testDiagnosticsFromUri } from "../support/diagnostics";
 import { resolveInTestFolder } from "../support/resolveInTestFolder";
 import { testWithLanguageServerAndRealFunctionMetadata } from "../support/testWithLanguageServer";
 
 suite("Linked templates functional tests", () => {
+    // <TC> in strings will be replaced with ${testCase}
+    function tcString(s: string, testCase: string): string {
+        return s.replace(/<TC>/g, testCase);
+    }
+
+    // <TC> in strings will be replaced with ${testCase}
+    function tcDiagnostics(ed: ExpectedDiagnostics, testCase: string): ExpectedDiagnostics {
+        if (ed.length === 0) {
+            return [];
+        } else if (typeof ed[0] === 'string') {
+            return (<string[]>ed).map((s: string) => tcString(<string>s, testCase));
+        } else {
+            return (<IExpectedDiagnostic[]>ed).map((d: IExpectedDiagnostic) => {
+                const d2 = Object.assign({}, d, { message: tcString(d.message, testCase) });
+                return d2;
+            });
+        }
+    }
+
+    // <TC> in strings will be replaced with ${testCase}
     function createLinkedTemplateTest(
-        testName: string,
+        testCase: string,
+        testDescription: string,
         options: {
             //mainTemplateContents?: Partial<IDeploymentTemplate>;
-            mainTemplateFile?: string;
+            mainTemplateFile: string;
             //mainParametersContents?: string;
-            mainParametersFile?: string;
+            mainParametersFile: string;
             mainTemplateExpected: ExpectedDiagnostics;
             linkedTemplates: {
                 linkedTemplateFile: string;
@@ -26,7 +47,7 @@ suite("Linked templates functional tests", () => {
         }
     ): void {
         testWithLanguageServerAndRealFunctionMetadata(
-            testName,
+            `${testCase} ${testDescription}`,
             async () => {
                 const templateContentsOrFilename = options.mainTemplateFile;
                 assert(templateContentsOrFilename);
@@ -34,30 +55,31 @@ suite("Linked templates functional tests", () => {
 
                 // Open and test diagnostics for the main template file
                 await testDiagnostics(
-                    templateContentsOrFilename,
+                    tcString(templateContentsOrFilename, testCase),
                     {
-                        parametersFile: templateContentsOrFilename
+                        parametersFile: tcString(templateContentsOrFilename, testCase),
                     },
-                    options.mainTemplateExpected
+                    tcDiagnostics(options.mainTemplateExpected, testCase)
                 );
 
                 // Test diagnostics (without opening them directly - that should have happened automatically) for the linked templates
                 for (const linkedTemplate of options.linkedTemplates) {
-                    const childUri = Uri.file(resolveInTestFolder(linkedTemplate.linkedTemplateFile));
+                    const childUri = Uri.file(resolveInTestFolder(tcString(linkedTemplate.linkedTemplateFile, testCase)));
                     await testDiagnosticsFromUri(
                         childUri,
                         {},
-                        linkedTemplate.expected
+                        tcDiagnostics(linkedTemplate.expected, testCase)
                     );
                 }
             });
     }
 
     createLinkedTemplateTest(
-        "tc01 one level, no validation errors, child in subfolder",
+        "tc01",
+        "one level, no validation errors, child in subfolder, relative path starts with subfolder name",
         {
-            mainTemplateFile: "templates/linkedTemplates/tc01/main.json",
-            mainParametersFile: "main.parameters.json",
+            mainTemplateFile: "templates/linkedTemplates/<TC>/<TC>.json",
+            mainParametersFile: "<TC>.parameters.json",
             mainTemplateExpected: [
                 // tslint:disable-next-line: no-suspicious-comment
                 // TODO: need schema update to fix this
@@ -65,7 +87,50 @@ suite("Linked templates functional tests", () => {
             ],
             linkedTemplates: [
                 {
-                    linkedTemplateFile: "templates/linkedTemplates/tc01/subfolder/child.json",
+                    linkedTemplateFile: "linkedTemplates/<TC>/subfolder/child.json",
+                    expected: [
+                        "Error: Undefined parameter reference: 'p3string-whoops' (arm-template (expressions))"
+                    ]
+                }
+            ]
+        }
+    );
+
+    createLinkedTemplateTest(
+        "tc02",
+        "error: child not found",
+        {
+            mainTemplateFile: "templates/linkedTemplates/<TC>/<TC>.json",
+            mainParametersFile: "<TC>.parameters.json",
+            mainTemplateExpected: [
+                // tslint:disable-next-line: no-suspicious-comment
+                // TODO: need schema update to fix this
+                'Warning: Missing required property "uri" (arm-template (schema))',
+
+                `Error: Template validation: Could not find linked template file `
+                + `"${resolveInTestFolder('templates/linkedTemplates/<TC>/subfolder/child.json')}"`
+                + ` (arm-template (validation))`
+            ],
+            linkedTemplates: [
+            ]
+        }
+    );
+
+    createLinkedTemplateTest(
+        "tc03",
+        "one level, no validation errors, child in subfolder, relative path starts with ./",
+        {
+            mainTemplateFile: "templates/linkedTemplates/<TC>/<TC>.json",
+            mainParametersFile: "<TC>.parameters.json",
+            mainTemplateExpected: [
+                // tslint:disable-next-line: no-suspicious-comment
+                // TODO: need schema update to fix this
+                'Warning: Missing required property "uri" (arm-template (schema))'
+            ],
+            linkedTemplates: [
+                {
+
+                    linkedTemplateFile: "templates/linkedTemplates/<TC>/subfolder/child.json",
                     expected: [
                         "Error: Undefined parameter reference: 'p3string-whoops' (arm-template (expressions))"
                     ]
