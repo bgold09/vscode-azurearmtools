@@ -1,5 +1,5 @@
 {
-    // one level, no errors, child in subfolder
+    // backslashes
 
     "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
     "contentVersion": "1.0.0.0",
@@ -14,7 +14,7 @@
             "properties": {
                 "mode": "Incremental",
                 "templateLink": {
-                    "relativePath": "subfolder/child.json"
+                    "relativePath": "subfolder\\child.json"
                 }
             }
         }

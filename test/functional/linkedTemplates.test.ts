@@ -58,6 +58,7 @@ suite("Linked templates functional tests", () => {
                     tcString(templateContentsOrFilename, testCase),
                     {
                         parametersFile: tcString(templateContentsOrFilename, testCase),
+                        //includeRange: true,
                     },
                     tcDiagnostics(options.mainTemplateExpected, testCase)
                 );
@@ -83,13 +84,13 @@ suite("Linked templates functional tests", () => {
             mainTemplateExpected: [
                 // tslint:disable-next-line: no-suspicious-comment
                 // TODO: need schema update to fix this
-                'Warning: Missing required property "uri" (arm-template (schema))'
+                'Warning: Missing required property "uri" (arm-template (schema)) [15,16-15,30]'
             ],
             linkedTemplates: [
                 {
                     linkedTemplateFile: "linkedTemplates/<TC>/subfolder/child.json",
                     expected: [
-                        "Error: Undefined parameter reference: 'p3string-whoops' (arm-template (expressions))"
+                        "Error: Undefined parameter reference: 'p3string-whoops' (arm-template (expressions)) [26,38]"
                     ]
                 }
             ]
@@ -105,11 +106,11 @@ suite("Linked templates functional tests", () => {
             mainTemplateExpected: [
                 // tslint:disable-next-line: no-suspicious-comment
                 // TODO: need schema update to fix this
-                'Warning: Missing required property "uri" (arm-template (schema))',
+                'Warning: Missing required property "uri" (arm-template (schema)) [13,16-13,30]',
 
                 `Error: Template validation: Could not find linked template file `
                 + `"${resolveInTestFolder('templates/linkedTemplates/<TC>/subfolder/child.json')}"`
-                + ` (arm-template (validation))`
+                + ` (arm-template (validation)) [11,26-11,26]`
             ],
             linkedTemplates: [
             ]
@@ -125,6 +126,57 @@ suite("Linked templates functional tests", () => {
             mainTemplateExpected: [
                 // tslint:disable-next-line: no-suspicious-comment
                 // TODO: need schema update to fix this
+                'Warning: Missing required property "uri" (arm-template (schema)) [13,16-13,30]'
+            ],
+            linkedTemplates: [
+                {
+
+                    linkedTemplateFile: "templates/linkedTemplates/<TC>/subfolder/child.json",
+                    expected: [
+                        "Error: Undefined parameter reference: 'p3string-whoops' (arm-template (expressions)) [26,38]"
+                    ]
+                }
+            ]
+        }
+    );
+
+    // tslint:disable-next-line: no-suspicious-comment
+    /* TODO: slow because showing two diagnostics groups asdf
+    createLinkedTemplateTest(
+        "tc04",
+        "one level, no validation errors, child in subfolder, folder and filename contain spaces",
+        {
+            mainTemplateFile: "templates/linkedTemplates/<TC>/<TC> with spaces.json",
+            mainParametersFile: "<TC> with spaces.parameters.json",
+            mainTemplateExpected: [
+                // tslint:disable-next-line: no-suspicious-comment
+                // TODO: need schema update to fix this
+                'Warning: Missing required property "uri" (arm-template (schema)) [15,16-15,30]'
+
+            ],
+            linkedTemplates: [
+                {
+
+                    linkedTemplateFile: "templates/linkedTemplates/<TC>/subfolder with spaces/child with spaces.json",
+                    expected: [
+                        "Error: Undefined parameter reference: 'p3string-whoops' (arm-template (expressions)) [26,38]"
+                    ]
+                }
+            ]
+        }
+    );*/
+
+    // tslint:disable-next-line: no-suspicious-comment
+    /* TODO: Can't deploy to test yet
+    createLinkedTemplateTest(
+        "tc05",
+        "backslashes in path",
+        {
+            mainTemplateFile: "templates/linkedTemplates/<TC>\\<TC>.json",
+            mainParametersFile: "<TC> with spaces.parameters.json",
+            mainTemplateExpected: [
+                // tslint:disable-next-line: no-suspicious-comment
+                // TODO: need schema update to fix this
                 'Warning: Missing required property "uri" (arm-template (schema))'
             ],
             linkedTemplates: [
@@ -132,11 +184,11 @@ suite("Linked templates functional tests", () => {
 
                     linkedTemplateFile: "templates/linkedTemplates/<TC>/subfolder/child.json",
                     expected: [
-                        "Error: Undefined parameter reference: 'p3string-whoops' (arm-template (expressions))"
+                        "Error: Undefined parameter reference: 'p3string-whoops' (arm-template (expressions)) [26,38]"
                     ]
                 }
             ]
         }
-    );
+    );*/
 
 });
