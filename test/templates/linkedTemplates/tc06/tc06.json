@@ -17,12 +17,12 @@
                 "templateLink": {
                     "relativePath": "subfolder/child.json"
                 },
-                "parameters": {
+                "parameters": { 
                     "stringParam": {
-                        "value": "123" // error: should be string
+                        "value": "123"
                     },
                     "intParam": {
-                        "value": "123" // error: should be int
+                        "value": 123 // error: should be int
                     }
                 }
             }
