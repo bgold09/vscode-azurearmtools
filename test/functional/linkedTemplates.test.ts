@@ -231,7 +231,7 @@ suite("Linked templates functional tests", () => {
     //         mainTemplateFile: "templates/linkedTemplates/<TC>/<TC>.json",
     //         mainParametersFile: "<TC>.parameters.json",
     //         mainTemplateExpected: [
-    //             // tslint:disable-next-line: no-suspicious-comment
+    // tslint:disable-next-line: no-suspicious-comment
     //             // TODO: need schema update to fix this
     //             'Warning: Missing required property "uri" (arm-template (schema)) [17,17]',
 
