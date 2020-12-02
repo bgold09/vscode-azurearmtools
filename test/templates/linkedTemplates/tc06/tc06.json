@@ -18,7 +18,12 @@
                     "relativePath": "subfolder/child.json"
                 },
                 "parameters": {
-                    "stringParam": 123 // error: should be string
+                    "stringParam": {
+                        "value": "123" // error: should be string
+                    },
+                    "intParam": {
+                        "value": "123" // error: should be int
+                    }
                 }
             }
         }

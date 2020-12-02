@@ -8,6 +8,13 @@
                 "description": "string parameter"
             },
             "defaultValue": "Premium"
+        },
+        "intParam": {
+            "type": "int",
+            "metadata": {
+                "description": "int parameter"
+            },
+            "defaultValue": 123
         }
     },
     "resources": [

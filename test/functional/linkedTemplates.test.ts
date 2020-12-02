@@ -197,8 +197,6 @@ suite("Linked templates functional tests", () => {
         }
     );*/
 
-    // tslint:disable-next-line: no-suspicious-comment
-    /* TODO: correct error location
     createLinkedTemplateTest(
         "tc06",
         "Parameter type mismatch error",
@@ -210,19 +208,20 @@ suite("Linked templates functional tests", () => {
                 // TODO: need schema update to fix this
                 'Warning: Missing required property "uri" (arm-template (schema)) [17,17]',
 
-                "Error: Template validation failed: Error converting value 123 to type 'Microsoft.WindowsAzure.ResourceStack.Frontdoor.Data.Definitions.DeploymentParameterDefinition'. Path 'parameters.stringParam', line 7, position 22. (arm-template (validation)) [The error occurred in a nested template near here] [1,2]"
+                "Error: Template validation failed: Template parameter JToken type is not valid. Expected 'Integer'. Actual 'String'. Please see https://aka.ms/arm-deploy/#parameter-file for usage details. (arm-template (validation)) [26,21] [The error occurred in a nested template near here] [26,21]"
             ],
             linkedTemplates: [
                 {
 
                     linkedTemplateFile: "templates/linkedTemplates/<TC>/subfolder/child.json",
                     expected: [
+                        "Warning: The parameter 'intParam' is never used. (arm-template (expressions)) [12,9-12,19]",
+                        "Warning: The parameter 'stringParam' is never used. (arm-template (expressions)) [5,9-5,22]",
                     ]
                 }
             ]
         }
     );
-    */
 
     //asdf
     // createLinkedTemplateTest(
