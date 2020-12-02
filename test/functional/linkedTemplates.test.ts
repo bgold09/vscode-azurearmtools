@@ -153,7 +153,7 @@ suite("Linked templates functional tests", () => {
         "one level, no validation errors, child in subfolder, folder and filename contain spaces",
         {
             mainTemplateFile: "templates/linkedTemplates/<TC>/<TC> with spaces.json",
-            mainParametersFile: "<TC> with spaces.parameters.json",
+            mainParametersFile: "<TC>.parameters.json",
             mainTemplateExpected: [
                 // tslint:disable-next-line: no-suspicious-comment
                 // TODO: need schema update to fix this
@@ -179,7 +179,7 @@ suite("Linked templates functional tests", () => {
         "backslashes in path",
         {
             mainTemplateFile: "templates/linkedTemplates/<TC>\\<TC>.json",
-            mainParametersFile: "<TC> with spaces.parameters.json",
+            mainParametersFile: "<TC>.parameters.json",
             mainTemplateExpected: [
                 // tslint:disable-next-line: no-suspicious-comment
                 // TODO: need schema update to fix this
@@ -197,4 +197,55 @@ suite("Linked templates functional tests", () => {
         }
     );*/
 
+    // tslint:disable-next-line: no-suspicious-comment
+    /* TODO: correct error location
+    createLinkedTemplateTest(
+        "tc06",
+        "Parameter type mismatch error",
+        {
+            mainTemplateFile: "templates/linkedTemplates/<TC>/<TC>.json",
+            mainParametersFile: "<TC>.parameters.json",
+            mainTemplateExpected: [
+                // tslint:disable-next-line: no-suspicious-comment
+                // TODO: need schema update to fix this
+                'Warning: Missing required property "uri" (arm-template (schema)) [17,17]',
+
+                "Error: Template validation failed: Error converting value 123 to type 'Microsoft.WindowsAzure.ResourceStack.Frontdoor.Data.Definitions.DeploymentParameterDefinition'. Path 'parameters.stringParam', line 7, position 22. (arm-template (validation)) [The error occurred in a nested template near here] [1,2]"
+            ],
+            linkedTemplates: [
+                {
+
+                    linkedTemplateFile: "templates/linkedTemplates/<TC>/subfolder/child.json",
+                    expected: [
+                    ]
+                }
+            ]
+        }
+    );
+    */
+
+    //asdf
+    // createLinkedTemplateTest(
+    //     "tc07",
+    //     "asdf",
+    //     {
+    //         mainTemplateFile: "templates/linkedTemplates/<TC>/<TC>.json",
+    //         mainParametersFile: "<TC>.parameters.json",
+    //         mainTemplateExpected: [
+    //             // tslint:disable-next-line: no-suspicious-comment
+    //             // TODO: need schema update to fix this
+    //             'Warning: Missing required property "uri" (arm-template (schema)) [17,17]',
+
+    //             "Error: Template validation failed: Error converting value 123 to type 'Microsoft.WindowsAzure.ResourceStack.Frontdoor.Data.Definitions.DeploymentParameterDefinition'. Path 'parameters.stringParam', line 7, position 22. (arm-template (validation)) [The error occurred in a nested template near here] [1,2]"
+    //         ],
+    //         linkedTemplates: [
+    //             {
+
+    //                 linkedTemplateFile: "templates/linkedTemplates/<TC>/subfolder/child.json",
+    //                 expected: [
+    //                 ]
+    //             }
+    //         ]
+    //     }
+    // );
 });

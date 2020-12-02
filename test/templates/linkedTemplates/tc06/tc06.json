@@ -1,9 +1,10 @@
 {
-    // one level, no errors, child in subfolder
+    // Parameter type mismatch
 
     "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
     "contentVersion": "1.0.0.0",
-    "parameters": {},
+    "parameters": {
+    },
     "functions": [],
     "variables": {},
     "resources": [
@@ -15,6 +16,9 @@
                 "mode": "Incremental",
                 "templateLink": {
                     "relativePath": "subfolder/child.json"
+                },
+                "parameters": {
+                    "stringParam": 123 // error: should be string
                 }
             }
         }
