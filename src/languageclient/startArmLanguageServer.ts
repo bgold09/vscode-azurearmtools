@@ -6,14 +6,15 @@
 import * as fse from 'fs-extra';
 import * as os from 'os';
 import * as path from 'path';
-import { ProgressLocation, window, workspace } from 'vscode';
+import { Diagnostic, ProgressLocation, Uri, window, workspace } from 'vscode';
 import { callWithTelemetryAndErrorHandling, callWithTelemetryAndErrorHandlingSync, IActionContext, parseError } from 'vscode-azureextensionui';
 import { LanguageClient, LanguageClientOptions, RevealOutputChannelOn, ServerOptions } from 'vscode-languageclient';
 import { acquireSharedDotnetInstallation } from '../acquisition/acquireSharedDotnetInstallation';
-import { armTemplateLanguageId, configKeys, configPrefix, downloadDotnetVersion, languageFriendlyName, languageServerFolderName, languageServerName } from '../constants';
+import { armTemplateLanguageId, configKeys, configPrefix, downloadDotnetVersion, languageFriendlyName, languageServerFolderName, languageServerName, notifications } from '../constants';
 import { templateDocumentSelector } from '../documents/templates/supported';
 import { ext } from '../extensionVariables';
 import { assert } from '../fixed_assert';
+import { IRequestOpenLinkedFileArgs, onRequestOpenLinkedFile } from '../linkedTemplates';
 import { WrappedErrorHandler } from './WrappedErrorHandler';
 
 const languageServerDllName = 'Microsoft.ArmLanguageServer.dll';
@@ -138,6 +139,21 @@ export async function startLanguageClient(serverDllPath: string, dotnetExePath: 
             revealOutputChannelOn: RevealOutputChannelOn.Error,
             synchronize: {
                 configurationSection: configPrefix
+            },
+            middleware: {
+                handleDiagnostics: (uri: Uri, diagnostics: Diagnostic[], _next: (uri: Uri, diagnostics: Diagnostic[]) => void): void => {
+                    let a = 1;
+                    a = a;
+                    // diagnostics.push(
+                    //     {
+                    //         message: `hi from middleware for ${uri.toString()}`,
+                    //         range: new Range(new Position(0, 0), new Position(0, 0)),
+                    //         severity: 0,
+                    //         source: "source"
+                    //     }
+                    // );
+                    _next(uri, diagnostics);
+                }
             }
         };
 
@@ -153,7 +169,7 @@ export async function startLanguageClient(serverDllPath: string, dotnetExePath: 
             armTemplateLanguageId,
             languageFriendlyName, // Used in the Output window combobox
             serverOptions,
-            clientOptions
+            clientOptions,
         );
 
         // Use an error handler that sends telemetry
@@ -177,6 +193,10 @@ export async function startLanguageClient(serverDllPath: string, dotnetExePath: 
 
             await client.onReady();
             ext.languageServerClient = client;
+
+            client.onRequest(notifications.requestOpenLinkedTemplate, async (args: IRequestOpenLinkedFileArgs) => {
+                return onRequestOpenLinkedFile(args);
+            });
         } catch (error) {
             throw new Error(
                 `${languageServerName}: An error occurred starting the language server.${os.EOL}${os.EOL}${parseError(error).message}`
