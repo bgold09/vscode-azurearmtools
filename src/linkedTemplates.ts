@@ -38,6 +38,15 @@ enum PathType {
     parametersLink = 2,
 }
 
+export enum LinkedFileLoadState {
+    NotLoaded = 0,
+    Loading = 1,
+    SuccessfullyLoaded = 2,
+    LoadFailed = 3,
+    TooDeep = 4,
+    NotSupported = 5,
+}
+
 export interface ILinkedTemplateReference {
     id: string; // Guid
     fullUri: string;
@@ -45,6 +54,8 @@ export interface ILinkedTemplateReference {
     lineNumberInParent: number;
     columnNumberInParent: number;
     parameterValues: { [key: string]: unknown };
+    loadState: LinkedFileLoadState;
+    loadErrorMessage: string | undefined;
 }
 
 export interface INotifyTemplateGraphArgs {

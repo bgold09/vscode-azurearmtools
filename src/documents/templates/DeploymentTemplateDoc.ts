@@ -747,7 +747,11 @@ export class DeploymentTemplateDoc extends DeploymentDocument {
                         break;
                     case TemplateScopeKind.LinkedDeployment:
                         //asdf
-                        lenses.push(LinkedTemplateCodeLens.create(scope, scope.rootObject.span, (<LinkedTemplateScope>scope).linkedFileReferences));
+                        lenses.push(
+                            LinkedTemplateCodeLens.create(
+                                scope,
+                                scope.rootObject.span,
+                                (<LinkedTemplateScope>scope).linkedFileReferences));
                         break;
                     default:
                         break;

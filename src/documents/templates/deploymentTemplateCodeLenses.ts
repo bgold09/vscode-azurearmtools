@@ -7,7 +7,8 @@
 import { Range, Uri } from 'vscode';
 import { parseError } from 'vscode-azureextensionui';
 import { Span } from '../../language/Span';
-import { ILinkedTemplateReference } from '../../linkedTemplates';
+import { ILinkedTemplateReference, LinkedFileLoadState } from '../../linkedTemplates';
+import { assertNever } from '../../util/assertNever';
 import { pathExists } from '../../util/pathExists';
 import { IGotoParameterValueArgs } from '../../vscodeIntegration/commandArguments';
 import { getVSCodeRangeFromSpan } from '../../vscodeIntegration/vscodePosition';
@@ -219,9 +220,31 @@ export class LinkedTemplateCodeLens extends ResolvableCodeLens {
     }
 
     public static create(scope: TemplateScope, span: Span, linkedTemplateReferences: ILinkedTemplateReference[] | undefined): LinkedTemplateCodeLens {
-        const linkedFile: string = !!linkedTemplateReferences && linkedTemplateReferences.length > 0 /*asf*/ ? linkedTemplateReferences[0].originalPath : '';
-        // tslint:disable-next-line: prefer-template
-        const title = "Linked template" + (linkedFile ? ` (${linkedFile})` : '');
+        let title = "Linked template";
+
+        if (linkedTemplateReferences && linkedTemplateReferences.length > 0) {
+            const ref = linkedTemplateReferences[0];
+            title += `: "${ref.originalPath}"`;
+
+            let loadState: string;
+            switch (ref.loadState) {
+                case LinkedFileLoadState.LoadFailed: loadState = `${ref.loadErrorMessage ?? 'Load failed'}`; break;
+                case LinkedFileLoadState.Loading: loadState = "Loading..."; break;
+                case LinkedFileLoadState.NotLoaded: loadState = "Not loaded"; break;
+                case LinkedFileLoadState.NotSupported: loadState = ""; break;
+                case LinkedFileLoadState.SuccessfullyLoaded: loadState = "Loaded"; break;
+                case LinkedFileLoadState.TooDeep: loadState = ""; break;
+                default:
+                    assertNever(ref.loadState);
+            }
+
+            if (loadState) {
+                title += ` (${loadState})`;
+            }
+
+            title += ` ${JSON.stringify(ref.parameterValues)}`;
+        }
+
         return new LinkedTemplateCodeLens(scope, span, title);
     }
 
