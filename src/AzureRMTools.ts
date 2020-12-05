@@ -6,7 +6,7 @@
 // CONSIDER: Refactor this file
 import * as path from 'path';
 import * as vscode from "vscode";
-import { AzureUserInput, callWithTelemetryAndErrorHandling, callWithTelemetryAndErrorHandlingSync, createAzExtOutputChannel, IActionContext, registerCommand, registerUIExtensionVariables, TelemetryProperties } from "vscode-azureextensionui";
+import { AzureUserInput, callWithTelemetryAndErrorHandling, callWithTelemetryAndErrorHandlingSync, createAzExtOutputChannel, IActionContext, ITelemetryContext, registerCommand, registerUIExtensionVariables, TelemetryProperties } from "vscode-azureextensionui";
 import { delay } from "../test/support/delay";
 import { armTemplateLanguageId, configKeys, configPrefix, expressionsDiagnosticsCompletionMessage, expressionsDiagnosticsSource, globalStateKeys, outputChannelName } from "./constants";
 import { DeploymentDocument, ResolvableCodeLens } from "./documents/DeploymentDocument";
@@ -24,6 +24,7 @@ import { ExtractItem } from './documents/templates/ExtractItem';
 import { gotoResources } from './documents/templates/gotoResources';
 import { getItemTypeQuickPicks, InsertItem } from "./documents/templates/insertItem";
 import { allSchemas, getPreferredSchema } from './documents/templates/schemas';
+import { TemplateScope } from './documents/templates/scopes/TemplateScope';
 import { getQuickPickItems, sortTemplate } from "./documents/templates/sortTemplate";
 import { mightBeDeploymentParameters, mightBeDeploymentTemplate, templateDocumentSelector, templateOrParameterDocumentSelector } from "./documents/templates/supported";
 import { TemplateSectionType } from "./documents/templates/TemplateSectionType";
@@ -34,7 +35,8 @@ import { Issue } from "./language/Issue";
 import * as Json from "./language/json/JSON";
 import { ReferenceList } from "./language/ReferenceList";
 import { Span } from "./language/Span";
-import { startArmLanguageServerInBackground } from "./languageclient/startArmLanguageServer";
+import { notifyTemplateGraphAvailable, startArmLanguageServerInBackground } from "./languageclient/startArmLanguageServer";
+import { assignTemplateGraphToDeploymentTemplate, INotifyTemplateGraphArgs } from './linkedTemplates';
 import { showInsertionContext } from "./snippets/showInsertionContext";
 import { SnippetManager } from "./snippets/SnippetManager";
 import { survey } from "./survey";
@@ -1031,6 +1033,8 @@ export class AzureRMTools {
             };
             ext.context.subscriptions.push(vscode.languages.registerRenameProvider(templateOrParameterDocumentSelector, renameProvider));
 
+            ext.context.subscriptions.push(notifyTemplateGraphAvailable(this.onTemplateGraphAvailable, this));
+
             startArmLanguageServerInBackground();
         });
     }
@@ -1225,18 +1229,18 @@ export class AzureRMTools {
             actionContext.errorHandling.suppressDisplay = true;
             actionContext.telemetry.suppressIfSuccessful = true;
             const doc = this.getOpenedDeploymentDocument(textDocument.uri);
+
             if (doc) {
                 const dpUri = this._mapping.getParameterFile(doc.documentUri);
                 let parametersProvider: ParameterValuesSourceProviderFromParameterFile | undefined;
                 if (dpUri) {
-                    // There is a parameter file, but we don't wan't to retrieve until we resolve
+                    // There is a parameter file, but we don't want to retrieve until we resolve
                     // the code lens because onProvideCodeLenses is supposed to be fast.
                     parametersProvider = new ParameterValuesSourceProviderFromParameterFile(this, dpUri);
                 }
+
                 return doc.getCodeLenses(parametersProvider);
             }
-
-            return undefined;
         });
     }
 
@@ -1735,4 +1739,41 @@ export class AzureRMTools {
             this.closeDeploymentFile(closedDocument);
         });
     }
+
+    private onTemplateGraphAvailable(e: INotifyTemplateGraphArgs & ITelemetryContext): void {
+        // asdf do we need to check document version?
+        const rootTemplateUri = vscode.Uri.parse(e.rootTemplateUri);
+        // tslint:disable-next-line: no-console
+        console.log(`Template graph available for ${rootTemplateUri}`); //asdf
+        const dt = this.getOpenedDeploymentTemplate(rootTemplateUri);
+        if (dt) {
+            assignTemplateGraphToDeploymentTemplate(e, dt);
+            this._codeLensChangedEmitter.fire();
+        }
+    }
+}
+
+class A extends ResolvableCodeLens {
+    public constructor(
+        scope: TemplateScope,
+        span: Span,
+        private title: string
+    ) {
+        super(scope, span);
+    }
+
+    public async resolve(): Promise<boolean> {
+        this.command = {
+            command: "",
+            title: this.title,
+        };
+
+        return true;
+    }
+
+    // public async resolve(): Promise<boolean> {
+    //     let title: string;
+
+    //     return super.resolveCore(title, children, 'children');
+    // }
 }

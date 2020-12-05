@@ -39,7 +39,7 @@ import { isArmSchema } from './schemas';
 import { DeploymentScopeKind } from './scopes/DeploymentScopeKind';
 import { IDeploymentScopeReference } from './scopes/IDeploymentScopeReference';
 import { TemplateScope } from "./scopes/TemplateScope";
-import { NestedTemplateOuterScope, TopLevelTemplateScope } from './scopes/templateScopes';
+import { LinkedTemplateScope, NestedTemplateOuterScope, TopLevelTemplateScope } from './scopes/templateScopes';
 import { UserFunctionParameterDefinition } from './UserFunctionParameterDefinition';
 
 export interface IScopedParseResult {
@@ -746,7 +746,8 @@ export class DeploymentTemplateDoc extends DeploymentDocument {
                         }
                         break;
                     case TemplateScopeKind.LinkedDeployment:
-                        lenses.push(LinkedTemplateCodeLens.create(scope, scope.rootObject.span));
+                        //asdf
+                        lenses.push(LinkedTemplateCodeLens.create(scope, scope.rootObject.span, (<LinkedTemplateScope>scope).linkedFileReferences));
                         break;
                     default:
                         break;

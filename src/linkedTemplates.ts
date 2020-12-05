@@ -5,9 +5,14 @@
 import * as path from 'path';
 import { ProgressLocation, Uri, window, workspace } from "vscode";
 import { callWithTelemetryAndErrorHandling, IActionContext, parseError, TelemetryProperties } from "vscode-azureextensionui";
+import { deploymentsResourceTypeLC, templateKeys } from './constants';
+import { DeploymentTemplateDoc } from './documents/templates/DeploymentTemplateDoc';
+import { LinkedTemplateScope } from './documents/templates/scopes/templateScopes';
 import { ext } from "./extensionVariables";
 import { assert } from './fixed_assert';
 import { PossibleError } from './PossibleError';
+import { normalizePath } from './util/normalizePath';
+import { ofType } from './util/ofType';
 import { pathExists } from './util/pathExists';
 
 /**
@@ -27,27 +32,24 @@ export interface IRequestOpenLinkedFileResult {
     loadErrorMessage: string | undefined;
 }
 
-// Defined in the validation assembly used by the language server
 enum PathType {
     templateLink = 0,
     templateRelativeLink = 1,
     parametersLink = 2,
 }
 
-interface ILinkedTemplate {
+export interface ILinkedTemplateReference {
     id: string; // Guid
-    fullPath: Uri;
-    lineNumber: number;
-    columnNumber: number;
-    //asdf pathType: PathType;
-    parameters: { [key: string]: unknown };
-    //asdf parentContext: ILinkedTemplateContext;
+    fullUri: string;
+    originalPath: string;
+    lineNumberInParent: number;
+    columnNumberInParent: number;
+    parameterValues: { [key: string]: unknown };
 }
 
-// tslint:disable-next-line: no-empty-interface asdf
 export interface INotifyTemplateGraphArgs {
-    rootTemplateUri: Uri;
-    linkedTemplates: ILinkedTemplate[];
+    rootTemplateUri: string;
+    linkedTemplates: ILinkedTemplateReference[];
 }
 
 /**
@@ -94,8 +96,6 @@ export async function onRequestOpenLinkedFile({ sourceTemplateUri, requestedLink
  * it will get sent to the language server.
  */
 async function tryOpenLinkedFile(localPath: string, pathType: PathType): Promise<PossibleError | undefined> {
-    //asdf
-    //await callWithTelemetryAndErrorHandling('tryLoadLinkedFile', async (actionContext: IActionContext) => { //asdf error handling
     return await window.withProgress<PossibleError | undefined>(//asdf?
         {
             location: ProgressLocation.Window,
@@ -129,5 +129,34 @@ async function tryOpenLinkedFile(localPath: string, pathType: PathType): Promise
             }
         }
     );
-
 }
+
+//asdf doc
+export function assignTemplateGraphToDeploymentTemplate(graph: INotifyTemplateGraphArgs, dt: DeploymentTemplateDoc): void { //asdf this is called a lot of times
+    assert(normalizePath(Uri.parse(graph.rootTemplateUri)) === normalizePath(dt.documentUri));
+
+    // Clear current
+    const linkedScopes = ofType(dt.allScopes, LinkedTemplateScope);
+    for (const linkedScope of linkedScopes) {
+        linkedScope.linkedFileReferences = [];
+    }
+
+    for (const linkReference of graph.linkedTemplates) {
+        const pc = dt.getContextFromDocumentLineAndColumnIndexes(linkReference.lineNumberInParent, linkReference.columnNumberInParent, undefined, true);
+        const enclosingResource = pc.getEnclosingResource();
+        if (enclosingResource) {
+            if (enclosingResource.getPropertyValue(templateKeys.resourceType)?.asStringValue?.unquotedValue.toLowerCase() === deploymentsResourceTypeLC) {
+                // It's a deployment resource - get the "templateLink" object, that's the root object of any linked template deployment
+                const templateLinkObjectValue = enclosingResource
+                    .getPropertyValue(templateKeys.properties)?.asObjectValue
+                    ?.getPropertyValue(templateKeys.linkedDeploymentTemplateLink)?.asObjectValue;
+                const matchingScope = linkedScopes.find(scope => scope.rootObject === templateLinkObjectValue);
+                if (matchingScope instanceof LinkedTemplateScope) {
+                    // Found it
+                    matchingScope.linkedFileReferences?.push(linkReference);
+                }
+            }
+        }
+    }
+}
+

@@ -5,8 +5,9 @@
 // tslint:disable: max-classes-per-file
 
 import { Uri } from "vscode";
-import { templateKeys } from "../../../constants";
+import { deploymentsResourceTypeLC, templateKeys } from "../../../constants";
 import * as Json from "../../../language/json/JSON";
+import { ILinkedTemplateReference } from "../../../linkedTemplates";
 import { assertNever } from "../../../util/assertNever";
 import { IParameterDefinition } from "../../parameters/IParameterDefinition";
 import { IParameterValuesSource } from "../../parameters/IParameterValuesSource";
@@ -229,8 +230,6 @@ export function getResourcesFromObject(owningScope: TemplateScope, objectValue: 
     return resources;
 }
 
-const deploymentsResourceTypeLC: string = 'microsoft.resources/deployments';
-
 export enum ExpressionScopeKind {
     inner = "inner",
     outer = "outer"
@@ -338,6 +337,7 @@ export class NestedTemplateOuterScope extends TemplateScope {
 export class LinkedTemplateScope extends TemplateScope {
     public constructor(
         private readonly parentScope: TemplateScope,
+        // The value of the "templateLink" property for this linked template
         templateLinkObject: Json.ObjectValue | undefined,
         // tslint:disable-next-line: variable-name
         __debugDisplay: string
@@ -349,6 +349,9 @@ export class LinkedTemplateScope extends TemplateScope {
             __debugDisplay
         );
     }
+
+    // This is detected after the tree is created, so is set when available.
+    public linkedFileReferences: ILinkedTemplateReference[] | undefined;
 
     public readonly scopeKind: TemplateScopeKind = TemplateScopeKind.LinkedDeployment;
 

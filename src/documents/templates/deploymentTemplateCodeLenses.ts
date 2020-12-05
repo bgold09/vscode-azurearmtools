@@ -7,6 +7,7 @@
 import { Range, Uri } from 'vscode';
 import { parseError } from 'vscode-azureextensionui';
 import { Span } from '../../language/Span';
+import { ILinkedTemplateReference } from '../../linkedTemplates';
 import { pathExists } from '../../util/pathExists';
 import { IGotoParameterValueArgs } from '../../vscodeIntegration/commandArguments';
 import { getVSCodeRangeFromSpan } from '../../vscodeIntegration/vscodePosition';
@@ -217,8 +218,11 @@ export class LinkedTemplateCodeLens extends ResolvableCodeLens {
         };
     }
 
-    public static create(scope: TemplateScope, span: Span): LinkedTemplateCodeLens {
-        return new LinkedTemplateCodeLens(scope, span, "Linked template");
+    public static create(scope: TemplateScope, span: Span, linkedTemplateReferences: ILinkedTemplateReference[] | undefined): LinkedTemplateCodeLens {
+        const linkedFile: string = !!linkedTemplateReferences && linkedTemplateReferences.length > 0 /*asf*/ ? linkedTemplateReferences[0].originalPath : '';
+        // tslint:disable-next-line: prefer-template
+        const title = "Linked template" + (linkedFile ? ` (${linkedFile})` : '');
+        return new LinkedTemplateCodeLens(scope, span, title);
     }
 
     public async resolve(): Promise<boolean> {

@@ -111,3 +111,5 @@ export namespace templateKeys {
     export const userFunctionNamespace = 'namespace';
     export const userFunctionMembers = 'members';
 }
+
+export const deploymentsResourceTypeLC: string = 'microsoft.resources/deployments';

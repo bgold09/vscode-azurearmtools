@@ -6,19 +6,20 @@
 import * as fse from 'fs-extra';
 import * as os from 'os';
 import * as path from 'path';
-import { Diagnostic, ProgressLocation, Uri, window, workspace } from 'vscode';
-import { callWithTelemetryAndErrorHandling, callWithTelemetryAndErrorHandlingSync, IActionContext, parseError } from 'vscode-azureextensionui';
+import { Diagnostic, Event, EventEmitter, ProgressLocation, Uri, window, workspace } from 'vscode';
+import { callWithTelemetryAndErrorHandling, callWithTelemetryAndErrorHandlingSync, IActionContext, ITelemetryContext, parseError } from 'vscode-azureextensionui';
 import { LanguageClient, LanguageClientOptions, RevealOutputChannelOn, ServerOptions } from 'vscode-languageclient';
 import { acquireSharedDotnetInstallation } from '../acquisition/acquireSharedDotnetInstallation';
 import { armTemplateLanguageId, configKeys, configPrefix, downloadDotnetVersion, languageFriendlyName, languageServerFolderName, languageServerName, notifications } from '../constants';
 import { templateDocumentSelector } from '../documents/templates/supported';
 import { ext } from '../extensionVariables';
 import { assert } from '../fixed_assert';
-import { IRequestOpenLinkedFileArgs, onRequestOpenLinkedFile } from '../linkedTemplates';
+import { INotifyTemplateGraphArgs, IRequestOpenLinkedFileArgs, onRequestOpenLinkedFile } from '../linkedTemplates';
 import { WrappedErrorHandler } from './WrappedErrorHandler';
 
 const languageServerDllName = 'Microsoft.ArmLanguageServer.dll';
 const defaultTraceLevel = 'Warning';
+const _notifyTemplateGraphAvailableEmitter: EventEmitter<INotifyTemplateGraphArgs & ITelemetryContext> = new EventEmitter<INotifyTemplateGraphArgs & ITelemetryContext>();
 
 export enum LanguageServerState {
     NotStarted,
@@ -27,6 +28,11 @@ export enum LanguageServerState {
     Started,
     Stopped,
 }
+
+/**
+ * An event that fires when the language server notifies us of the current full template graph of a root template
+ */
+export const notifyTemplateGraphAvailable: Event<INotifyTemplateGraphArgs & ITelemetryContext> = _notifyTemplateGraphAvailableEmitter.event;
 
 export async function stopArmLanguageServer(): Promise<void> {
     // Work-around for https://github.com/microsoft/vscode/issues/83254 - store languageServerState global via ext to keep it a singleton
@@ -197,6 +203,10 @@ export async function startLanguageClient(serverDllPath: string, dotnetExePath: 
             client.onRequest(notifications.requestOpenLinkedTemplate, async (args: IRequestOpenLinkedFileArgs) => {
                 return onRequestOpenLinkedFile(args);
             });
+
+            client.onNotification(notifications.notifyTemplateGraph, async (args: INotifyTemplateGraphArgs) => {
+                onNotifyTemplateGraph(args);
+            });
         } catch (error) {
             throw new Error(
                 `${languageServerName}: An error occurred starting the language server.${os.EOL}${os.EOL}${parseError(error).message}`
@@ -291,4 +301,16 @@ function findLanguageServer(): string {
 
 async function isFile(pathPath: string): Promise<boolean> {
     return (await fse.pathExists(pathPath)) && (await fse.stat(pathPath)).isFile();
+}
+
+/**
+ * Handles a notification from the language server that provides us the linked template reference graph
+ * @param sourceTemplateUri The full URI of the template which contains the link
+ * @param requestedLinkPath The full URI of the resolved link being requested
+ */
+
+function onNotifyTemplateGraph(args: INotifyTemplateGraphArgs): void {
+    callWithTelemetryAndErrorHandlingSync('notifyTemplateGraph', async (context: IActionContext) => { //asdf error handling
+        _notifyTemplateGraphAvailableEmitter.fire(<INotifyTemplateGraphArgs & ITelemetryContext>Object.assign({}, context.telemetry, args));
+    });
 }
