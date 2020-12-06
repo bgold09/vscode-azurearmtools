@@ -746,7 +746,6 @@ export class DeploymentTemplateDoc extends DeploymentDocument {
                         }
                         break;
                     case TemplateScopeKind.LinkedDeployment:
-                        //asdf
                         lenses.push(
                             LinkedTemplateCodeLens.create(
                                 scope,
