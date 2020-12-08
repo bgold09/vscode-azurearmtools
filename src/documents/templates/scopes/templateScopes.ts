@@ -6,9 +6,10 @@
 
 import { Uri } from "vscode";
 import { deploymentsResourceTypeLC, templateKeys } from "../../../constants";
+import { ILinkedTemplateReference } from "../../../ILinkedTemplateReference";
 import * as Json from "../../../language/json/JSON";
-import { ILinkedTemplateReference } from "../../../linkedTemplates";
 import { assertNever } from "../../../util/assertNever";
+import { NormalizedMap } from "../../../util/NormalizedMap";
 import { IParameterDefinition } from "../../parameters/IParameterDefinition";
 import { IParameterValuesSource } from "../../parameters/IParameterValuesSource";
 import { ParameterDefinition } from "../../parameters/ParameterDefinition";
@@ -16,6 +17,7 @@ import { ParameterValuesSourceFromJsonObject } from "../../parameters/ParameterV
 import { DeploymentTemplateDoc } from "../DeploymentTemplateDoc";
 import { IJsonDocument } from "../IJsonDocument";
 import { IResource } from "../IResource";
+import { getParameterDefinitionsFromLinkedTemplate } from "../linkedTemplates/getParameterDefinitionsFromLinkedTemplate";
 import { Resource } from "../Resource";
 import { UserFunctionNamespaceDefinition } from "../UserFunctionNamespaceDefinition";
 import { IVariableDefinition, TopLevelCopyBlockVariableDefinition, TopLevelVariableDefinition } from "../VariableDefinition";
@@ -28,7 +30,7 @@ export class EmptyScope extends TemplateScope {
 
     constructor(
     ) {
-        super(new DeploymentTemplateDoc('', Uri.parse('https://emptydoc')), undefined, undefined, "Empty Scope");
+        super(new DeploymentTemplateDoc('', Uri.parse('https://emptydoc', true)), undefined, undefined, "Empty Scope");
     }
 }
 
@@ -335,10 +337,14 @@ export class NestedTemplateOuterScope extends TemplateScope {
 }
 
 export class LinkedTemplateScope extends TemplateScope {
+    private _parameterValuesSource: ParameterValuesSourceFromJsonObject;
+
     public constructor(
         private readonly parentScope: TemplateScope,
         // The value of the "templateLink" property for this linked template
         templateLinkObject: Json.ObjectValue | undefined,
+        // parameter values for the linked template
+        private parameterValuesProperty: Json.Property | undefined,
         // tslint:disable-next-line: variable-name
         __debugDisplay: string
     ) {
@@ -348,10 +354,35 @@ export class LinkedTemplateScope extends TemplateScope {
             getDeploymentScopeFromRootObject(templateLinkObject),
             __debugDisplay
         );
+
+        this._parameterValuesSource = new ParameterValuesSourceFromJsonObject(
+            this.document,
+            this.parameterValuesProperty,
+            templateLinkObject
+        );
     }
 
     // This is detected after the tree is created, so is set when available.
-    public linkedFileReferences: ILinkedTemplateReference[] | undefined;
+    public get linkedFileReferences(): ILinkedTemplateReference[] | undefined { return this._linkedFileReferences; }
+    private _linkedFileReferences: ILinkedTemplateReference[] | undefined;
+    private _linkedFileParameterDefinitions: IParameterDefinition[] | undefined;
+    public setLinkedFileReferences(
+        linkedFileReferences: ILinkedTemplateReference[] | undefined,
+        loadedTemplates: NormalizedMap<Uri, DeploymentTemplateDoc>
+    ): void {
+        //asdf cache?
+
+        this._linkedFileReferences = undefined;
+        this._linkedFileParameterDefinitions = undefined;
+        this.clearCaches();
+
+        if (linkedFileReferences && linkedFileReferences.length > 0) {
+            this._linkedFileParameterDefinitions = getParameterDefinitionsFromLinkedTemplate(linkedFileReferences[0/*asdf*/], loadedTemplates); //asdf move to caller
+        }
+
+        this._linkedFileReferences = linkedFileReferences;
+        return undefined;
+    }
 
     public readonly scopeKind: TemplateScopeKind = TemplateScopeKind.LinkedDeployment;
 
@@ -359,11 +390,13 @@ export class LinkedTemplateScope extends TemplateScope {
     // templateLink object reference parameters and variables, those are referring to
     // the parent's parameters/variables - a linked template does create a new scope, but
     // only inside the template contents themselves, not the templateLink object)
-    public readonly hasUniqueParamsVarsAndFunctions: boolean = false;
+    //public readonly hasUniqueParamsVarsAndFunctions: boolean = false; //asdf
+    public readonly hasUniqueParamsVarsAndFunctions: boolean = true; //asdf
 
     protected getParameterDefinitions(): IParameterDefinition[] | undefined {
-        // tslint:disable-next-line: no-non-null-assertion // constructor guarantees not undefined
-        return this.parentScope.parameterDefinitions;
+        // tslint:disable-next-line: no-non-null-assertion // constructor guarantees not undefined asdf remove this line
+        return this._linkedFileParameterDefinitions;
+        //asdf? return this.parentScope.parameterDefinitions;
     }
 
     protected getVariableDefinitions(): IVariableDefinition[] | undefined {
@@ -378,6 +411,10 @@ export class LinkedTemplateScope extends TemplateScope {
 
     protected getResources(): IResource[] | undefined {
         return undefined;
+    }
+
+    protected getParameterValuesSource(): IParameterValuesSource | undefined {
+        return this._parameterValuesSource;
     }
 }
 
@@ -422,13 +459,13 @@ export function getChildTemplateForResourceObject(
             ?.getPropertyValue(templateKeys.nestedDeploymentTemplateProperty)?.asObjectValue;
         const templateName: string = resourceObject?.getPropertyValue(templateKeys.resourceName)?.asStringValue?.unquotedValue
             ?? '(unnamed)';
+        const parameterValuesProperty: Json.Property | undefined = resourceObject?.getPropertyValue(templateKeys.properties)
+            ?.asObjectValue
+            ?.getProperty(templateKeys.parameters);
 
         if (nestedTemplateObject) {
             // It's a nested (embedded) template
             const scopeKind = getExpressionScopeKind(resourceObject);
-            const parameterValuesProperty: Json.Property | undefined = resourceObject?.getPropertyValue(templateKeys.properties)
-                ?.asObjectValue
-                ?.getProperty(templateKeys.parameters);
             switch (scopeKind) {
                 case ExpressionScopeKind.outer:
                     return new NestedTemplateOuterScope(
@@ -451,7 +488,7 @@ export function getChildTemplateForResourceObject(
                 propertiesObject
                     ?.getPropertyValue(templateKeys.linkedDeploymentTemplateLink)?.asObjectValue;
             if (templateLinkObject) {
-                return new LinkedTemplateScope(parentScope, templateLinkObject, `Linked template "${templateName}"`);
+                return new LinkedTemplateScope(parentScope, templateLinkObject, parameterValuesProperty, `Linked template "${templateName}"`);
             }
         }
 

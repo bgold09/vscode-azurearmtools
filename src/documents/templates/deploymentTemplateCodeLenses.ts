@@ -6,8 +6,8 @@
 
 import { Range, Uri } from 'vscode';
 import { parseError } from 'vscode-azureextensionui';
+import { ILinkedTemplateReference, LinkedFileLoadState } from "../../ILinkedTemplateReference";
 import { Span } from '../../language/Span';
-import { ILinkedTemplateReference, LinkedFileLoadState } from '../../linkedTemplates';
 import { assertNever } from '../../util/assertNever';
 import { pathExists } from '../../util/pathExists';
 import { IGotoParameterValueArgs } from '../../vscodeIntegration/commandArguments';
@@ -99,7 +99,7 @@ export class ParameterDefinitionCodeLens extends ResolvableCodeLens {
         let paramsSource: IParameterValuesSource | undefined;
         let errorMessage: string | undefined;
         try {
-            paramsSource = await this.parameterValuesSourceProvider.getValuesSource();
+            paramsSource = await this.parameterValuesSourceProvider.getValuesSource(); //asdf resolved laziliy here
         } catch (err) {
             if (this.parameterValuesSourceProvider.parameterFileUri) {
                 if (!await pathExists(this.parameterValuesSourceProvider.parameterFileUri)) {

@@ -41,7 +41,6 @@ export abstract class TemplateScope implements IParameterDefinitionsSource {
     private _variableDefinitions: CachedValue<IVariableDefinition[] | undefined> = new CachedValue<IVariableDefinition[] | undefined>();
     private _functionDefinitions: CachedValue<UserFunctionNamespaceDefinition[] | undefined> = new CachedValue<UserFunctionNamespaceDefinition[] | undefined>();
     private _resources: CachedValue<IResource[] | undefined> = new CachedValue<IResource[] | undefined>();
-    private _parameterValues: CachedValue<IParameterValuesSource | undefined> = new CachedValue<IParameterValuesSource | undefined>();
 
     constructor(
         public readonly document: IJsonDocument, // The document that contains this scope
@@ -66,7 +65,7 @@ export abstract class TemplateScope implements IParameterDefinitionsSource {
     /**
      * Indicates whether this scope's params, vars and namespaces are unique.
      * False if it shares its members with its parents.
-     * Note that resources are always unique for a scope.
+     * Note that resources are always unique to a scope.
      */
     public readonly hasUniqueParamsVarsAndFunctions: boolean = true;
 
@@ -129,7 +128,11 @@ export abstract class TemplateScope implements IParameterDefinitionsSource {
     }
 
     public get parameterValuesSource(): IParameterValuesSource | undefined {
-        return this._parameterValues.getOrCacheValue(() => this.getParameterValuesSource());
+        return this.getParameterValuesSource();
+    }
+
+    public clearCaches(): void {
+        this._parameterDefinitions.clear(); //asdf others?
     }
 
     public get childScopes(): TemplateScope[] {

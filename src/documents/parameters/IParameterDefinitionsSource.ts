@@ -12,8 +12,7 @@ import { IParameterDefinition } from "./IParameterDefinition";
  */
 export interface IParameterDefinitionsSource {
     /**
-     * The document containing the parameter values (could be a parameter file
-     * or a template file if for a nested/linked template)
+     * The document containing the parameter definitions
      */
     document: IJsonDocument;
 

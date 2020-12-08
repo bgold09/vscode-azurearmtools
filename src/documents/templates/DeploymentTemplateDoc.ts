@@ -22,7 +22,7 @@ import { CachedValue } from '../../util/CachedValue';
 import { expectParameterDocumentOrUndefined } from '../../util/expectDocument';
 import { Histogram } from '../../util/Histogram';
 import { nonNullValue } from '../../util/nonNull';
-import { FindReferencesVisitor } from "../../visitors/FindReferencesVisitor";
+import { FindReferencesAndErrorsVisitor } from "../../visitors/FindReferencesVisitor";
 import { FunctionCountVisitor } from "../../visitors/FunctionCountVisitor";
 import { GenericStringVisitor } from "../../visitors/GenericStringVisitor";
 import { ReferenceInVariableDefinitionsVisitor } from '../../visitors/ReferenceInVariableDefinitionsVisitor';
@@ -197,7 +197,7 @@ export class DeploymentTemplateDoc extends DeploymentDocument {
                 if (tleParseResult.parseResult.expression) {
                     // tslint:disable-next-line:no-non-null-assertion // Guaranteed by if
                     const scope = tleParseResult.scope;
-                    FindReferencesVisitor.visit(scope, jsonStringValue.startIndex, tleParseResult.parseResult.expression, functions, referenceListsMap, issues);
+                    FindReferencesAndErrorsVisitor.visit(scope, jsonStringValue.startIndex, tleParseResult.parseResult.expression, functions, referenceListsMap, issues);
                 }
             });
 
@@ -343,7 +343,7 @@ export class DeploymentTemplateDoc extends DeploymentDocument {
     private getMissingParameterErrors(): Issue[] {
         const errors: Issue[] = [];
 
-        for (const scope of this.uniqueScopes) {
+        for (const scope of this.uniqueScopes) { //asdf are linked files a unique scope?  Probably yes
             if (scope.parameterValuesSource) {
                 const scopeErrors = getMissingParameterErrors(scope.parameterValuesSource, scope);
                 errors.push(...scopeErrors);
@@ -502,7 +502,7 @@ export class DeploymentTemplateDoc extends DeploymentDocument {
         }
     }
 
-    public getCodeActions(
+    public getCodeActions(//asdf recalculate
         _associatedDocument: DeploymentDocument | undefined,
         range: Range | Selection,
         context: CodeActionContext
@@ -671,17 +671,17 @@ export class DeploymentTemplateDoc extends DeploymentDocument {
 
         for (const scope of this.allScopes) {
             if (scope.hasUniqueParamsVarsAndFunctions) {
-                let sourceProvider: IParameterValuesSourceProvider | undefined;
+                let paramValuesSourceProvider: IParameterValuesSourceProvider | undefined;
 
                 if (scope instanceof TopLevelTemplateScope) {
-                    sourceProvider = topLevelParameterValuesProvider;
+                    paramValuesSourceProvider = topLevelParameterValuesProvider;
                 } else {
-                    // For anything other than the top level, we already have the parameter values source, no need to resolve lazily
+                    // For anything other than the top level, we already have the parameter values source, no need to resolve lazily //asdf?
                     const parameterValuesSource = scope.parameterValuesSource;
-                    sourceProvider = parameterValuesSource ? new SynchronousParameterValuesSourceProvider(parameterValuesSource) : undefined;
+                    paramValuesSourceProvider = parameterValuesSource ? new SynchronousParameterValuesSourceProvider(parameterValuesSource) : undefined;
                 }
 
-                const codelenses = this.getParameterCodeLenses(scope, sourceProvider);
+                const codelenses = this.getParameterCodeLenses(scope, paramValuesSourceProvider);
                 lenses.push(...codelenses);
             }
 
@@ -707,7 +707,7 @@ export class DeploymentTemplateDoc extends DeploymentDocument {
 
         const lenses: ResolvableCodeLens[] = [];
 
-        // Code lens for the "parameters" section itself - indicates where the parameters are coming from
+        // Code lens for the top-level "parameters" section itself - indicates where the parameters are coming from
         if (uniqueScope instanceof TopLevelTemplateScope) {
             // Top level
             const parametersCodeLensSpan = uniqueScope.rootObject?.getProperty(templateKeys.parameters)?.span
@@ -716,7 +716,7 @@ export class DeploymentTemplateDoc extends DeploymentDocument {
             // Is there a parameter file?
             const parameterFileUri = parameterValuesSourceProvider?.parameterFileUri;
             if (parameterFileUri) {
-                // Yes - indicate currently parameter file
+                // Yes - indicate current parameter file path
                 assert(uniqueScope instanceof TopLevelTemplateScope, "Expecting top-level scope");
                 lenses.push(new ShowCurrentParameterFileCodeLens(uniqueScope, parametersCodeLensSpan, parameterFileUri));
             }
@@ -726,7 +726,7 @@ export class DeploymentTemplateDoc extends DeploymentDocument {
         }
 
         // Code lens for each parameter definition
-        if (parameterValuesSourceProvider) {
+        if (parameterValuesSourceProvider) { //asdf
             lenses.push(...uniqueScope.parameterDefinitions.map(pd => new ParameterDefinitionCodeLens(uniqueScope, pd, parameterValuesSourceProvider)));
         }
 

@@ -24,7 +24,6 @@ import { ExtractItem } from './documents/templates/ExtractItem';
 import { gotoResources } from './documents/templates/gotoResources';
 import { getItemTypeQuickPicks, InsertItem } from "./documents/templates/insertItem";
 import { allSchemas, getPreferredSchema } from './documents/templates/schemas';
-import { TemplateScope } from './documents/templates/scopes/TemplateScope';
 import { getQuickPickItems, sortTemplate } from "./documents/templates/sortTemplate";
 import { mightBeDeploymentParameters, mightBeDeploymentTemplate, templateDocumentSelector, templateOrParameterDocumentSelector } from "./documents/templates/supported";
 import { TemplateSectionType } from "./documents/templates/TemplateSectionType";
@@ -45,6 +44,7 @@ import { escapeNonPaths } from "./util/escapeNonPaths";
 import { expectTemplateDocument } from "./util/expectDocument";
 import { getRenameError } from "./util/getRenameError";
 import { Histogram } from "./util/Histogram";
+import { NormalizedMap } from './util/NormalizedMap';
 import { normalizePath } from "./util/normalizePath";
 import { pathExists } from "./util/pathExists";
 import { readUtf8FileWithBom } from "./util/readUtf8FileWithBom";
@@ -410,6 +410,8 @@ export class AzureRMTools {
         }
 
         this._codeLensChangedEmitter.fire();
+        //asdf update errors as well (but only if deployment doc?)
+
     }
 
     private getOpenedDeploymentDocument(documentOrUri: vscode.TextDocument | vscode.Uri): DeploymentDocument | undefined {
@@ -437,7 +439,7 @@ export class AzureRMTools {
      * take extra care to avoid slowing down performance, especially if it's not
      * an ARM template or parameter file.
      */
-    private updateOpenedDocument(textDocument: vscode.TextDocument): void {
+    private updateOpenedDocument(textDocument: vscode.TextDocument, fasdf: boolean = true): void {
         // tslint:disable-next-line:no-suspicious-comment
         // TODO: refactor
         // tslint:disable-next-line: cyclomatic-complexity max-func-body-length
@@ -483,6 +485,10 @@ export class AzureRMTools {
 
                 if (treatAsDeploymentTemplate) {
                     this.ensureDeploymentDocumentEventsHookedUp();
+                    if (fasdf && this._e && this.getNormalizedDocumentKey(vscode.Uri.parse/*asdf*/(this._e.rootTemplateUri, true)) === this.getNormalizedDocumentKey(deploymentTemplate.documentUri)) {
+                        this.setUpTemplate(deploymentTemplate); //asdf
+                    }
+
                     this.setOpenedDeploymentDocument(documentUri, deploymentTemplate);
                     survey.registerActiveUse();
 
@@ -1128,7 +1134,7 @@ export class AzureRMTools {
                 incorrectArgs?: string;
             } & TelemetryProperties = actionContext.telemetry.properties;
 
-            let issues: Issue[] = deploymentTemplate.getErrors(undefined);
+            let issues: Issue[] = deploymentTemplate.getErrors(undefined); //asdf cached?  But that's a problem with linked templates
 
             // Full function counts
             const functionCounts: Histogram = deploymentTemplate.getFunctionCounts();
@@ -1217,9 +1223,9 @@ export class AzureRMTools {
             }
 
             // Load parameter file asynchronously and expose its parameter values
-            public async getValuesSource(): Promise<IParameterValuesSource> {
+            public async getValuesSource(): Promise<IParameterValuesSource> { //asdf
                 return this._parameterValuesSource.getOrCachePromise(async () => {
-                    const dp = await this.parent.getOrReadParametersFile(this.parameterFileUri);
+                    const dp = await this.parent.getOrReadParametersFile(this.parameterFileUri); //asdf use similar code
                     return dp?.parameterValuesSource;
                 });
             }
@@ -1232,14 +1238,14 @@ export class AzureRMTools {
 
             if (doc) {
                 const dpUri = this._mapping.getParameterFile(doc.documentUri);
-                let parametersProvider: ParameterValuesSourceProviderFromParameterFile | undefined;
+                let topLevelParametersProvider: ParameterValuesSourceProviderFromParameterFile | undefined;
                 if (dpUri) {
                     // There is a parameter file, but we don't want to retrieve until we resolve
                     // the code lens because onProvideCodeLenses is supposed to be fast.
-                    parametersProvider = new ParameterValuesSourceProviderFromParameterFile(this, dpUri);
+                    topLevelParametersProvider = new ParameterValuesSourceProviderFromParameterFile(this, dpUri);
                 }
 
-                return doc.getCodeLenses(parametersProvider);
+                return doc.getCodeLenses(topLevelParametersProvider);
             }
         });
     }
@@ -1456,7 +1462,7 @@ export class AzureRMTools {
             return doc;
         }
 
-        // Nope, have to read it from disk
+        // Nope, have to read it from disk //asdf
         const contents = await readUtf8FileWithBom(uri.fsPath);
         return new DeploymentParametersDoc(contents, uri);
     }
@@ -1740,40 +1746,41 @@ export class AzureRMTools {
         });
     }
 
-    private onTemplateGraphAvailable(e: INotifyTemplateGraphArgs & ITelemetryContext): void {
-        // asdf do we need to check document version?
-        const rootTemplateUri = vscode.Uri.parse(e.rootTemplateUri);
-        // tslint:disable-next-line: no-console
-        console.log(`Template graph available for ${rootTemplateUri}`); //asdf
-        const dt = this.getOpenedDeploymentTemplate(rootTemplateUri);
-        if (dt) {
-            assignTemplateGraphToDeploymentTemplate(e, dt);
+    private _e: INotifyTemplateGraphArgs | undefined; //asdf
+
+    // asdf move this to the document itself
+    private onTemplateGraphAvailable(e: INotifyTemplateGraphArgs & ITelemetryContext): void { //asdf why so many calls?
+        this._e = e; //asdf
+    }
+
+    private setUpTemplate(dt: DeploymentTemplateDoc): void {
+        if (this._e) {//asdf
+            // // asdf do we need to check document version?
+            // // asdf see if it changed first
+            // const rootTemplateUri = vscode.Uri.parse(e.rootTemplateUri, true);
+            // // tslint:disable-next-line: no-console
+            // console.log(`Template graph available for ${rootTemplateUri}`); //asdf
+            // const dt = this.getOpenedDeploymentTemplate(rootTemplateUri);
+            // if (dt) {
+            const map: NormalizedMap<vscode.Uri, DeploymentTemplateDoc> = new NormalizedMap<vscode.Uri, DeploymentTemplateDoc>(
+                this.getNormalizedDocumentKey
+            ); //asdf
+            for (const entry of this._deploymentDocuments) {
+                if (entry[1] instanceof DeploymentTemplateDoc) {
+                    map.set(entry[1].documentUri, entry[1]);
+                }
+            }
+
+            assignTemplateGraphToDeploymentTemplate(this._e, dt, map);
+
+            //asdf
+            for (const doc of vscode.workspace.textDocuments) {
+                if (this.getNormalizedDocumentKey(doc.uri) === this.getNormalizedDocumentKey(dt.documentUri)) {
+                    this.updateOpenedDocument(doc, false); //asdf don't do it this way, causes recursion
+                }
+            }
             this._codeLensChangedEmitter.fire();
+            //asdf }
         }
     }
-}
-
-class A extends ResolvableCodeLens {
-    public constructor(
-        scope: TemplateScope,
-        span: Span,
-        private title: string
-    ) {
-        super(scope, span);
-    }
-
-    public async resolve(): Promise<boolean> {
-        this.command = {
-            command: "",
-            title: this.title,
-        };
-
-        return true;
-    }
-
-    // public async resolve(): Promise<boolean> {
-    //     let title: string;
-
-    //     return super.resolveCore(title, children, 'children');
-    // }
 }

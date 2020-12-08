@@ -89,7 +89,7 @@ export * from "./src/util/sorting";
 export * as strings from "./src/util/strings";
 export * from './src/util/time';
 export { wrapError } from "./src/util/wrapError";
-export { FindReferencesVisitor } from "./src/visitors/FindReferencesVisitor";
+export { FindReferencesAndErrorsVisitor as FindReferencesVisitor } from "./src/visitors/FindReferencesVisitor";
 export { FunctionCountVisitor } from "./src/visitors/FunctionCountVisitor";
 export { IncorrectArgumentsCountIssue } from "./src/visitors/IncorrectArgumentsCountIssue";
 export { ReferenceInVariableDefinitionsVisitor } from "./src/visitors/ReferenceInVariableDefinitionsVisitor";
