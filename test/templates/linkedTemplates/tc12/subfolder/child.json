@@ -1,15 +1,16 @@
 {
-    // "missing and extra parameters (validation)"
-
     "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
     "contentVersion": "1.0.0.0",
     "parameters": {
+        "childIntParam": {
+            "type": "int"
+        },
+        "childStringParam": {
+            "type": "string"
+        }
     },
-    "functions": [],
     "variables": {
-        "v1": 123,
-        "v2": 321,
-        "v3": 456
+        "childVar1": "value"
     },
     "resources": [
         {
@@ -19,20 +20,17 @@
             "properties": {
                 "mode": "Incremental",
                 "templateLink": {
-                    "relativePath": "subfolder/child.json"
+                    "relativePath": "child2.json"
                 },
                 "parameters": {
-                    // ERROR: Missing value for stringParam
-                    "intParam": {
-                        "value": "[variables('v1')]"
+                    "stringParam": {
+                        "value": "123"
                     },
-                    // ERROR: Invalid parameter (not defined in the linked template)
-                    "extraParam": {
-                        "value": "[variables('v2')]"
+                    "intParam": {
+                        "value": "123" // error: should be int
                     }
                 }
             }
         }
-    ],
-    "outputs": {}
+    ]
 }

@@ -21,10 +21,16 @@ import { getParameterDefinitionsFromLinkedTemplate } from "../linkedTemplates/ge
 import { Resource } from "../Resource";
 import { UserFunctionNamespaceDefinition } from "../UserFunctionNamespaceDefinition";
 import { IVariableDefinition, TopLevelCopyBlockVariableDefinition, TopLevelVariableDefinition } from "../VariableDefinition";
-import { getDeploymentScope } from "./getDeploymentScope";
-import { IDeploymentScopeReference } from "./IDeploymentScopeReference";
+import { getDeploymentScopeReference } from "./getDeploymentScopeReference";
+import { IDeploymentSchemaReference } from "./IDeploymentSchemaReference";
 import { TemplateScope, TemplateScopeKind } from "./TemplateScope";
 
+export interface IChildDeploymentScope { //asdf doc
+    /**
+     * The resource which is a deployments resource and defines this child deployment
+     */
+    owningDeploymentResource: IResource;
+}
 export class EmptyScope extends TemplateScope {
     public scopeKind: TemplateScopeKind = TemplateScopeKind.Empty;
 
@@ -71,7 +77,7 @@ abstract class TemplateScopeFromObject extends TemplateScope {
         // tslint:disable-next-line: variable-name
         __debugDisplay: string
     ) {
-        super(document, _templateRootObject, getDeploymentScopeFromRootObject(_templateRootObject), __debugDisplay);
+        super(document, _templateRootObject, getDeploymentScopeReferenceFromRootObject(_templateRootObject), __debugDisplay);
     }
 
     protected getParameterDefinitions(): IParameterDefinition[] | undefined {
@@ -245,7 +251,7 @@ export enum ExpressionScopeKind {
  *
  * See https://docs.microsoft.com/en-us/azure/azure-resource-manager/templates/linked-templates#expression-evaluation-scope-in-nested-templates
  */
-export class NestedTemplateInnerScope extends TemplateScopeFromObject {
+export class NestedTemplateInnerScope extends TemplateScopeFromObject /*asdf implements IChildDeploymentScope*/ {
     private _parameterValuesSource: ParameterValuesSourceFromJsonObject;
 
     public constructor(
@@ -258,6 +264,7 @@ export class NestedTemplateInnerScope extends TemplateScopeFromObject {
         __debugDisplay: string
     ) {
         super(
+            // the scope applies to the "template" property's value
             document,
             nestedTemplateObject,
             __debugDisplay
@@ -288,7 +295,7 @@ export class NestedTemplateInnerScope extends TemplateScopeFromObject {
  *
  * See https://docs.microsoft.com/en-us/azure/azure-resource-manager/templates/linked-templates#expression-evaluation-scope-in-nested-templates
  */
-export class NestedTemplateOuterScope extends TemplateScope {
+export class NestedTemplateOuterScope extends TemplateScope /*asdf implements IChildDeploymentScope*/ {
     public constructor(
         private readonly parentScope: TemplateScope,
         // The value of the "template" property containing the nested template itself
@@ -300,8 +307,9 @@ export class NestedTemplateOuterScope extends TemplateScope {
     ) {
         super(
             parentScope.document,
+            // the scope applies to the "template" property's value
             nestedTemplateObject,
-            getDeploymentScopeFromRootObject(nestedTemplateObject),
+            getDeploymentScopeReferenceFromRootObject(nestedTemplateObject),
             __debugDisplay
         );
     }
@@ -336,22 +344,25 @@ export class NestedTemplateOuterScope extends TemplateScope {
     }
 }
 
-export class LinkedTemplateScope extends TemplateScope {
+export class LinkedTemplateScope extends TemplateScope implements IChildDeploymentScope {
     private _parameterValuesSource: ParameterValuesSourceFromJsonObject;
 
     public constructor(
-        private readonly parentScope: TemplateScope,
+        parentScope: TemplateScope,
         // The value of the "templateLink" property for this linked template
         templateLinkObject: Json.ObjectValue | undefined,
         // parameter values for the linked template
         private parameterValuesProperty: Json.Property | undefined,
+        public owningDeploymentResource: IResource,
         // tslint:disable-next-line: variable-name
         __debugDisplay: string
     ) {
         super(
             parentScope.document,
-            templateLinkObject,
-            getDeploymentScopeFromRootObject(templateLinkObject),
+            // The vars/params/funcs defined for the linked template doesn't actually apply to evaluation of any expressions inside
+            //   this template (they would only apply inside the linked template file itself), so the root object is always undefined.
+            undefined,
+            undefined,  //getDeploymentScopeReferenceFromRootObject(templateLinkObject), //asdf? need to get this from linked template
             __debugDisplay
         );
 
@@ -386,12 +397,46 @@ export class LinkedTemplateScope extends TemplateScope {
 
     public readonly scopeKind: TemplateScopeKind = TemplateScopeKind.LinkedDeployment;
 
+    //asdf
+    // A linked template scope asdf:
+    //   "templateLink": expressions
+    /*
+        Technically, a linked template deployment does create a new scope, but it's not defined inside the main template but rather in the external
+        linked template.  The parameters defined inside the linked template are exposed here for use with validation and intellisense
+
+            {
+            "name": "linkedDeployment1",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2019-10-01",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    // This is still part of the parent scope.
+                    // Expressions here should be evaluated using the parent scope
+                    "contentVersion": "expression",
+                    "relativePath": "(string literal)",
+                    "uri": "expression"
+                },
+                "parameters": {
+                    // These are the parameter values to pass to the linked template.
+                    // This is still part of the parent scope, so expressions here are evaluated in the parent's scope.
+
+                    "childParam1": {
+                        "value": "expression" // Part of parent scope
+                    }
+                }
+            }
+        }
+    */
+
     // Shares its members with its parent (i.e., if the expressions inside the
     // templateLink object reference parameters and variables, those are referring to
     // the parent's parameters/variables - a linked template does create a new scope, but
     // only inside the template contents themselves, not the templateLink object)
     //public readonly hasUniqueParamsVarsAndFunctions: boolean = false; //asdf
     public readonly hasUniqueParamsVarsAndFunctions: boolean = true; //asdf
+
+    public readonly isExternal: boolean = true;
 
     protected getParameterDefinitions(): IParameterDefinition[] | undefined {
         // tslint:disable-next-line: no-non-null-assertion // constructor guarantees not undefined asdf remove this line
@@ -400,13 +445,11 @@ export class LinkedTemplateScope extends TemplateScope {
     }
 
     protected getVariableDefinitions(): IVariableDefinition[] | undefined {
-        // tslint:disable-next-line: no-non-null-assertion // constructor guarantees not undefined
-        return this.parentScope.variableDefinitions;
+        return undefined;
     }
 
     protected getNamespaceDefinitions(): UserFunctionNamespaceDefinition[] | undefined {
-        // tslint:disable-next-line: no-non-null-assertion // constructor guarantees not undefined
-        return this.parentScope.namespaceDefinitions;
+        return undefined;
     }
 
     protected getResources(): IResource[] | undefined {
@@ -427,7 +470,8 @@ export function isDeploymentResource(resourceObject: Json.Value | undefined): bo
 // Note: This is here instead of in Resource.ts to avoid a circular dependence
 export function getChildTemplateForResourceObject(
     parentScope: TemplateScope,
-    resourceObject: Json.ObjectValue | undefined // an element of the "resources" section
+    resource: IResource,
+    resourceObject: Json.ObjectValue | undefined // an element of the "resources" section    asdf remove - get from resource
 ): TemplateScope | undefined {
     // Example nested template
 
@@ -488,7 +532,7 @@ export function getChildTemplateForResourceObject(
                 propertiesObject
                     ?.getPropertyValue(templateKeys.linkedDeploymentTemplateLink)?.asObjectValue;
             if (templateLinkObject) {
-                return new LinkedTemplateScope(parentScope, templateLinkObject, parameterValuesProperty, `Linked template "${templateName}"`);
+                return new LinkedTemplateScope(parentScope, templateLinkObject, parameterValuesProperty, resource, `Linked template "${templateName}"`);
             }
         }
 
@@ -506,7 +550,7 @@ function getExpressionScopeKind(resourceObject: Json.ObjectValue | undefined): E
         : ExpressionScopeKind.outer; // Defaults to outer
 }
 
-function getDeploymentScopeFromRootObject(rootObject: Json.ObjectValue | undefined): IDeploymentScopeReference {
+function getDeploymentScopeReferenceFromRootObject(rootObject: Json.ObjectValue | undefined): IDeploymentSchemaReference {
     const schemaStringValue = rootObject?.getPropertyValue(templateKeys.schema)?.asStringValue;
-    return getDeploymentScope(schemaStringValue);
+    return getDeploymentScopeReference(schemaStringValue);
 }

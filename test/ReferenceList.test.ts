@@ -10,7 +10,7 @@ import { DefinitionKind, DeploymentTemplateDoc, ReferenceList, Span } from "../e
 
 suite("Reference", () => {
     suite("List", () => {
-        const document = new DeploymentTemplateDoc("", Uri.parse("fake", true));
+        const document = new DeploymentTemplateDoc("", Uri.parse("fake"));
 
         suite("constructor(Reference.Type, Span[])", () => {
             test("with null type", () => {

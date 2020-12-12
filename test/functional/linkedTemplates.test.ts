@@ -9,6 +9,7 @@ import { Uri } from "vscode";
 import { parseError } from "vscode-azureextensionui";
 import { ExpectedDiagnostics, IExpectedDiagnostic, testDiagnostics, testDiagnosticsFromUri } from "../support/diagnostics";
 import { resolveInTestFolder } from "../support/resolveInTestFolder";
+import { testLog } from "../support/testLog";
 import { testWithLanguageServerAndRealFunctionMetadata } from "../support/testWithLanguageServer";
 
 suite("Linked templates functional tests", () => {
@@ -41,12 +42,14 @@ suite("Linked templates functional tests", () => {
             //mainParametersContents?: string;
             mainParametersFile: string;
             mainTemplateExpected: ExpectedDiagnostics;
-            // If specified, wait for a diagnostic to match the following substring between continuing with checks
+            // If specified, wait for a diagnostic to match the following substring before continuing with checks
             waitForDiagnosticSubstring?: string;
 
             linkedTemplates: {
                 linkedTemplateFile: string;
                 expected: ExpectedDiagnostics;
+                // If specified, wait for a diagnostic to match the following substring between continuing with checks
+                waitForDiagnosticSubstring?: string;
             }[];
         }
     ): void {
@@ -58,28 +61,33 @@ suite("Linked templates functional tests", () => {
                 assert(options.mainParametersFile);
 
                 // Open and test diagnostics for the main template file
+                testLog.writeLine("Testing diagnostics in main template.");
                 await testDiagnostics(
                     tcString(templateContentsOrFilename, testCase),
                     {
-                        parametersFile: tcString(templateContentsOrFilename, testCase),
+                        parametersFile: tcString(options.mainParametersFile, testCase),
                         waitForDiagnosticSubstring: options.waitForDiagnosticSubstring,
                     },
                     tcDiagnostics(options.mainTemplateExpected, testCase)
                 );
+
+                testLog.writeLine("Diagnostics in main template were correct.");
 
                 // Test diagnostics (without opening them directly - that should have happened automatically) for the linked templates
                 for (const linkedTemplate of options.linkedTemplates) {
                     const childPath = resolveInTestFolder(tcString(linkedTemplate.linkedTemplateFile, testCase));
                     const childUri = Uri.file(childPath);
                     try {
+                        testLog.writeLine(`Testing diagnostics in ${linkedTemplate.linkedTemplateFile}`);
                         await testDiagnosticsFromUri(
                             childUri,
                             {
+                                waitForDiagnosticSubstring: linkedTemplate.waitForDiagnosticSubstring
                             },
                             tcDiagnostics(linkedTemplate.expected, testCase)
                         );
                     } catch (err) {
-                        throw new Error(`Diagnostics failed for linked template ${childPath}: ${parseError(err).message}`);
+                        throw new Error(`Diagnostics did not match expected for linked template ${childPath}: ${parseError(err).message}`);
                     }
                 }
             });
@@ -261,7 +269,7 @@ suite("Linked templates functional tests", () => {
 
     createLinkedTemplateTest(
         "tc08",
-        "2 levels deep, error in parameters to 2nd level, child1.json also has a parameter file - child2 gets traversed via the opened child1 (since it has a param file)",
+        "2 levels deep, error in parameters to 2nd level, child1.json also has a parameter file - child2 gets traversed via the opened child1 (since child1 has a param file)",
         {
             mainTemplateFile: "templates/linkedTemplates/<TC>/<TC>.json",
             mainParametersFile: "<TC>.parameters.json",
@@ -280,7 +288,8 @@ suite("Linked templates functional tests", () => {
 
                         "Warning: The variable 'unusedVar' is never used. (arm-template (expressions)) [5,9]",
                         "Error: Template validation failed: Template parameter JToken type is not valid. Expected 'Integer'. Actual 'String'. Please see https://aka.ms/arm-deploy/#parameter-file for usage details. (arm-template (validation)) [25,21] [The error occurred in a nested template near here] [25,21]",
-                    ]
+                    ],
+                    waitForDiagnosticSubstring: "Template validation failed"
                 },
                 {
                     linkedTemplateFile: "templates/linkedTemplates/<TC>/subfolder/child2.json",
@@ -295,6 +304,7 @@ suite("Linked templates functional tests", () => {
 
     createLinkedTemplateTest(
         "tc09",
+        // asdf Cannot get a character index for a columnIndex (30) that is greater than the lineIndex's (30) line max column index (27).
         "two calls to same linked template, second call has an error",
         {
             mainTemplateFile: "templates/linkedTemplates/<TC>/<TC>.json",
@@ -307,6 +317,7 @@ suite("Linked templates functional tests", () => {
 
                 "Error: Template validation failed: Template parameter JToken type is not valid. Expected 'Integer'. Actual 'String'. Please see https://aka.ms/arm-deploy/#parameter-file for usage details. (arm-template (validation)) [35,21] [The error occurred in a nested template near here] [35,21]",
             ],
+            waitForDiagnosticSubstring: "Template validation failed",
             linkedTemplates: [
                 {
                     linkedTemplateFile: "templates/linkedTemplates/<TC>/subfolder/child.json",
@@ -318,4 +329,92 @@ suite("Linked templates functional tests", () => {
             ]
         }
     );
+
+    suite("Parameter validation", () => {
+
+        createLinkedTemplateTest(//asdf
+            "tc10",
+            "missing and extra parameters (validation)",
+            {
+                mainTemplateFile: "templates/linkedTemplates/<TC>/<TC>.json",
+                mainParametersFile: "<TC>.parameters.json",
+                mainTemplateExpected: [
+                    // tslint:disable-next-line: no-suspicious-comment
+                    // TODO: need schema update to fix this
+                    'Warning: Missing required property "uri" (arm-template (schema))',
+
+                    "Error: Template validation failed: The template parameters 'extraParam' in the parameters file are not valid; they are not present in the original template and can therefore not be provided at deployment time. The only supported parameters for this template are 'intParam, stringParam'. Please see https://aka.ms/arm-deploy/#parameter-file for usage details. (arm-template (validation)) [The error occurred in a nested template near here]",
+                    'Error: The following parameters do not have values: "stringParam" (arm-template (expressions))',
+
+                    "Warning: The variable 'v3' is never used. (arm-template (expressions))",
+                ],
+                linkedTemplates: [
+                    {
+                        linkedTemplateFile: "templates/linkedTemplates/<TC>/subfolder/child.json",
+                        expected: [
+                            'Warning: Missing required property "uri" (arm-template (schema)) [19,17-19,31]',
+                            "Warning: The parameter 'intParam' is never used. (arm-template (expressions)) [5,9-5,19]",
+                            "Warning: The parameter 'stringParam' is never used. (arm-template (expressions)) [8,9-8,22]",
+                        ]
+                    }
+                ]
+            }
+        );
+
+        createLinkedTemplateTest(
+            "tc11",
+            "Missing parameters - no 'parameters' object under linked template parameters",
+            {
+                mainTemplateFile: "templates/linkedTemplates/<TC>/<TC>.json",
+                mainParametersFile: "<TC>.parameters.json",
+                mainTemplateExpected: [
+                    'Error: The following parameters do not have values: "intParam", "stringParam" (arm-template (expressions)) [21,33-21,33]',
+                    'Warning: Missing required property "uri" (arm-template (schema)) [21,17-21,31]',
+                    "Warning: The variable 'v1' is never used. (arm-template (expressions)) [10,9-10,13]",
+                    "Warning: The variable 'v2' is never used. (arm-template (expressions)) [11,9-11,13]"
+                ],
+                linkedTemplates: [
+                    {
+                        linkedTemplateFile: "templates/linkedTemplates/<TC>/subfolder/child.json",
+                        expected: [
+                            'Warning: Missing required property "uri" (arm-template (schema)) [19,17-19,31]',
+                            "Warning: The parameter 'intParam' is never used. (arm-template (expressions)) [5,9-5,19]",
+                            "Warning: The parameter 'stringParam' is never used. (arm-template (expressions)) [8,9-8,22]",
+                        ]
+                    }
+                ]
+            }
+        );
+
+        createLinkedTemplateTest(//asdf
+            "tc12",
+            "Verify correct scope of expressions, variables, parameters",
+            {
+                mainTemplateFile: "templates/linkedTemplates/<TC>/<TC>.json",
+                mainParametersFile: "<TC>.parameters.json",
+                mainTemplateExpected: [
+                    // tslint:disable-next-line: no-suspicious-comment
+                    // TODO: need schema update to fix this
+                    'Warning: Missing required property "uri" (arm-template (schema)) [49,17]'
+
+                    //asdf no other errors
+                ],
+                linkedTemplates: [
+                    {
+                        linkedTemplateFile: "templates/linkedTemplates/<TC>/subfolder/child.json",
+                        expected: [
+                            // tslint:disable-next-line: no-suspicious-comment
+                            // TODO: need schema update to fix this
+                            'Warning: Missing required property "uri" (arm-template (schema)) [22,17-22,31]',
+
+                            "Warning: The parameter 'childIntParam' is never used. (arm-template (expressions)) [5,9-5,24]",
+                            "Warning: The parameter 'childStringParam' is never used. (arm-template (expressions)) [8,9-8,27]",
+                            "Warning: The variable 'childVar1' is never used. (arm-template (expressions)) [13,9-13,20]"
+                        ]
+                    }
+                ]
+            }
+        );
+    });
+
 });

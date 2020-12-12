@@ -474,28 +474,29 @@ export class TemplatePositionContext extends PositionContext {
         return this.document.topLevelScope;
     }
 
-    public getEnclosingResource(): Json.ObjectValue | undefined {
-        if (this.jsonValue && this.document.topLevelValue) {
-            const parents = <(Json.ObjectValue | Json.ArrayValue)[]>this.document.topLevelValue
-                ?.findLineage(this.jsonValue)
-                ?.reverse()
-                ?? [];
-            while (parents.length > 1) {
-                if (parents[0] instanceof Json.ObjectValue
-                    && parents[1] instanceof Json.ArrayValue
-                    && parents[2].isPropertyWithName(templateKeys.resources)
-                    && parents[0].hasProperty(templateKeys.resourceName)
-                    && parents[0].hasProperty(templateKeys.resourceType)
-                ) {
-                    return parents[0];
-                }
+    //asdf
+    // public getEnclosingResource(): Json.ObjectValue | undefined {
+    //     if (this.jsonValue && this.document.topLevelValue) {
+    //         const parents = <(Json.ObjectValue | Json.ArrayValue)[]>this.document.topLevelValue
+    //             ?.findLineage(this.jsonValue)
+    //             ?.reverse()
+    //             ?? [];
+    //         while (parents.length > 1) {
+    //             if (parents[0] instanceof Json.ObjectValue
+    //                 && parents[1] instanceof Json.ArrayValue
+    //                 && parents[2].isPropertyWithName(templateKeys.resources)
+    //                 && parents[0].hasProperty(templateKeys.resourceName)
+    //                 && parents[0].hasProperty(templateKeys.resourceType)
+    //             ) {
+    //                 return parents[0];
+    //             }
 
-                parents.shift();
-            }
-        }
+    //             parents.shift();
+    //         }
+    //     }
 
-        return undefined;
-    }
+    //     return undefined;
+    // }
 
     private getDependsOnCompletionItems(triggerCharacter: string | undefined): Completion.Item[] {
         const insertionContext = this.getInsertionContext({ triggerCharacter, allowInsideJsonString: true });

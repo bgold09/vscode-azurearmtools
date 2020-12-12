@@ -439,7 +439,7 @@ export class AzureRMTools {
      * take extra care to avoid slowing down performance, especially if it's not
      * an ARM template or parameter file.
      */
-    private updateOpenedDocument(textDocument: vscode.TextDocument, fasdf: boolean = true): void {
+    private updateOpenedDocument(textDocument: vscode.TextDocument): void {
         // tslint:disable-next-line:no-suspicious-comment
         // TODO: refactor
         // tslint:disable-next-line: cyclomatic-complexity max-func-body-length
@@ -485,9 +485,6 @@ export class AzureRMTools {
 
                 if (treatAsDeploymentTemplate) {
                     this.ensureDeploymentDocumentEventsHookedUp();
-                    if (fasdf && this._e && this.getNormalizedDocumentKey(vscode.Uri.parse/*asdf*/(this._e.rootTemplateUri, true)) === this.getNormalizedDocumentKey(deploymentTemplate.documentUri)) {
-                        this.setUpTemplate(deploymentTemplate); //asdf
-                    }
 
                     this.setOpenedDeploymentDocument(documentUri, deploymentTemplate);
                     survey.registerActiveUse();
@@ -547,7 +544,7 @@ export class AzureRMTools {
 
                     // Not waiting for return
                     // tslint:disable-next-line: no-floating-promises
-                    this.reportDeploymentTemplateErrors(textDocument, deploymentTemplate).then(async (errorsWarnings) => {
+                    this.reportDeploymentTemplateErrorsInBackground(textDocument, deploymentTemplate).then((errorsWarnings: IErrorsAndWarnings | undefined) => {
                         if (isNewlyOpened) {
                             // Telemetry for template opened
                             if (errorsWarnings) {
@@ -588,7 +585,7 @@ export class AzureRMTools {
                         survey.registerActiveUse();
 
                         // tslint:disable-next-line: no-floating-promises
-                        this.reportDeploymentParametersErrors(textDocument, deploymentParameters).then(async (errorsWarnings) => {
+                        this.reportDeploymentParametersErrorsInBackground(textDocument, deploymentParameters).then(async (errorsWarnings) => {
                             if (isNewlyOpened && errorsWarnings) {
                                 // A deployment template has been opened (as opposed to having been tabbed to)
 
@@ -744,8 +741,6 @@ export class AzureRMTools {
         deploymentDocument: DeploymentDocument,
         associatedDocument: DeploymentDocument | undefined
     ): IErrorsAndWarnings {
-        // Don't wait
-        // tslint:disable-next-line: no-floating-promises
         ++this._diagnosticsVersion;
 
         let errors: Issue[] = deploymentDocument.getErrors(associatedDocument);
@@ -770,12 +765,15 @@ export class AzureRMTools {
         return { errors, warnings };
     }
 
-    private async reportDeploymentTemplateErrors(
+    private async reportDeploymentTemplateErrorsInBackground(
         textDocument: vscode.TextDocument,
         deploymentTemplate: DeploymentTemplateDoc
     ): Promise<IErrorsAndWarnings | undefined> {
         return await callWithTelemetryAndErrorHandling('reportDeploymentTemplateErrors', async (actionContext: IActionContext): Promise<IErrorsAndWarnings> => {
             actionContext.telemetry.suppressIfSuccessful = true;
+
+            //asdf don't do twice for same template
+            this.setUpTemplate(deploymentTemplate); //asdf - should it be async?
 
             // Note: Associated parameters? Not currently used by getErrors
             const associatedParameters: DeploymentParametersDoc | undefined = undefined;
@@ -783,7 +781,7 @@ export class AzureRMTools {
         });
     }
 
-    private async reportDeploymentParametersErrors(
+    private async reportDeploymentParametersErrorsInBackground(
         textDocument: vscode.TextDocument,
         deploymentParameters: DeploymentParametersDoc
     ): Promise<IErrorsAndWarnings | undefined> {
@@ -1746,15 +1744,34 @@ export class AzureRMTools {
         });
     }
 
-    private _e: INotifyTemplateGraphArgs | undefined; //asdf
+    private _e: NormalizedMap<vscode.Uri, INotifyTemplateGraphArgs>
+        = new NormalizedMap<vscode.Uri, INotifyTemplateGraphArgs>(
+            this.getNormalizedDocumentKey
+        ); //asdf
 
     // asdf move this to the document itself
     private onTemplateGraphAvailable(e: INotifyTemplateGraphArgs & ITelemetryContext): void { //asdf why so many calls?
-        this._e = e; //asdf
+        // tslint:disable-next-line: prefer-template no-console
+        console.log("============================== graph:\n" + JSON.stringify(e, null, 2)); //asdf
+        const rootTemplateUri = vscode.Uri.parse(e.rootTemplateUri);
+        this._e.set(vscode.Uri.parse/*asdf*/(e.rootTemplateUri, true), e); //asdf
+        const dt = this.getOpenedDeploymentTemplate(rootTemplateUri);
+
+        if (dt) {
+            for (const doc of vscode.workspace.textDocuments) {//asdf extract
+                const rootTemplateKey = this.getNormalizedDocumentKey(vscode.Uri.parse(e.rootTemplateUri, true));
+                if (this.getNormalizedDocumentKey(doc.uri) === rootTemplateKey) {
+                    // tslint:disable-next-line: no-floating-promises // Don't wait
+                    this.reportDeploymentTemplateErrorsInBackground(doc, dt);
+                }
+            }
+            this._codeLensChangedEmitter.fire();
+        }
     }
 
     private setUpTemplate(dt: DeploymentTemplateDoc): void {
-        if (this._e) {//asdf
+        const e = this._e.get(dt.documentUri);
+        if (e) {//asdf
             // // asdf do we need to check document version?
             // // asdf see if it changed first
             // const rootTemplateUri = vscode.Uri.parse(e.rootTemplateUri, true);
@@ -1771,16 +1788,7 @@ export class AzureRMTools {
                 }
             }
 
-            assignTemplateGraphToDeploymentTemplate(this._e, dt, map);
-
-            //asdf
-            for (const doc of vscode.workspace.textDocuments) {
-                if (this.getNormalizedDocumentKey(doc.uri) === this.getNormalizedDocumentKey(dt.documentUri)) {
-                    this.updateOpenedDocument(doc, false); //asdf don't do it this way, causes recursion
-                }
-            }
-            this._codeLensChangedEmitter.fire();
-            //asdf }
+            assignTemplateGraphToDeploymentTemplate(e, dt, map);
         }
     }
 }

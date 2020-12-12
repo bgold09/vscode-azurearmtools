@@ -15,7 +15,7 @@ import { IResource } from '../IResource';
 import { UserFunctionDefinition } from '../UserFunctionDefinition';
 import { UserFunctionNamespaceDefinition } from "../UserFunctionNamespaceDefinition";
 import { IVariableDefinition } from '../VariableDefinition';
-import { IDeploymentScopeReference } from './IDeploymentScopeReference';
+import { IDeploymentSchemaReference } from './IDeploymentSchemaReference';
 
 export enum TemplateScopeKind {
     Empty = "Empty",
@@ -44,19 +44,23 @@ export abstract class TemplateScope implements IParameterDefinitionsSource {
 
     constructor(
         public readonly document: IJsonDocument, // The document that contains this scope
+        /** The object that the scope applies to (expressions inside this object will use this scope for evaluation) */
         public readonly rootObject: Json.ObjectValue | undefined,
-        // Will be undefined if this scope is not a deployment (e.g. it's a user function scope).
-        // If it is a deployment scope but the schema is invalid, deploymentScope will be undefined and
-        //   contains kind=unknown
-        public readonly deploymentScope: IDeploymentScopeReference | undefined,
+        /**
+         * The scope of the deployment if this represents a deployment (RG, subscription, MG, tenant)
+         * Undefined if this scope is not a deployment (e.g. it's a user function scope).
+         * If it is a deployment scope but the schema is invalid, deploymentScope will be undefined and
+         *  contains kind=unknown
+         */
+        public readonly deploymentSchema: IDeploymentSchemaReference | undefined,
         // tslint:disable-next-line:variable-name
         public readonly __debugDisplay: string // Provides context for debugging
     ) {
     }
 
-    public get isDeployment(): boolean {
-        return !!this.deploymentScope;
-    }
+    // public get isDeployment(): boolean { asdfs
+    //     return !!this.deploymentSchema;
+    // }
 
     public readonly abstract scopeKind: TemplateScopeKind;
 
@@ -68,6 +72,11 @@ export abstract class TemplateScope implements IParameterDefinitionsSource {
      * Note that resources are always unique to a scope.
      */
     public readonly hasUniqueParamsVarsAndFunctions: boolean = true;
+
+    /**
+     * True if this scope is external to the hosting template file (i.e., it's a linked deployment template)
+     */
+    public readonly isExternal: boolean = false;
 
     /**
      * The root object that owns the parameters, variables and user functions that are used by

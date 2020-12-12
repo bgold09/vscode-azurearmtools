@@ -37,7 +37,7 @@ import { getResourcesInfo } from './getResourcesInfo';
 import { getParentAndChildCodeLenses } from './ParentAndChildCodeLenses';
 import { isArmSchema } from './schemas';
 import { DeploymentScopeKind } from './scopes/DeploymentScopeKind';
-import { IDeploymentScopeReference } from './scopes/IDeploymentScopeReference';
+import { IDeploymentSchemaReference } from './scopes/IDeploymentSchemaReference';
 import { TemplateScope } from "./scopes/TemplateScope";
 import { LinkedTemplateScope, NestedTemplateOuterScope, TopLevelTemplateScope } from './scopes/templateScopes';
 import { UserFunctionParameterDefinition } from './UserFunctionParameterDefinition';
@@ -213,8 +213,14 @@ export class DeploymentTemplateDoc extends DeploymentDocument {
         const referenceListsMap = this.allReferences.referenceListsMap;
 
         for (const scope of this.uniqueScopes) {
+            if (scope.isExternal) {
+                // If the scope is external (linked deployment scope), there can be no uses of a
+                // var/param/userfunc in this template
+                continue;
+            }
+
             // Unused parameters
-            for (const parameterDefinition of scope.parameterDefinitions) {
+            for (const parameterDefinition of scope.parameterDefinitions) { //asdf isExternal?
                 if (!referenceListsMap.has(parameterDefinition)) {
                     const message = parameterDefinition instanceof UserFunctionParameterDefinition
                         ? `User-function parameter '${parameterDefinition.nameValue.toString()}' is never used.`
@@ -312,8 +318,8 @@ export class DeploymentTemplateDoc extends DeploymentDocument {
 
         // Only check top-level scope for now
         const scope = this.topLevelScope;
-        const deploymentScope: IDeploymentScopeReference | undefined = scope.deploymentScope;
-        if (deploymentScope?.matchingInfo?.deploymentScopeKind === DeploymentScopeKind.resourceGroup) {
+        const deploymentSchema: IDeploymentSchemaReference | undefined = scope.deploymentSchema;
+        if (deploymentSchema?.matchingInfo?.deploymentScopeKind === DeploymentScopeKind.resourceGroup) {
             for (const resource of scope.resources) {
                 if (resource.resourceTypeValue) {
                     const resourceTypeLC: string | undefined = resource.resourceTypeValue.asStringValue?.unquotedValue.toLowerCase();
@@ -321,7 +327,7 @@ export class DeploymentTemplateDoc extends DeploymentDocument {
                         const warningMessage = `This resource type may not available for a deployment scoped to resource group. Are you using the correct schema?`;
                         const warning = new Issue(resource.resourceTypeValue.span, warningMessage, IssueKind.incorrectScopeWarning);
 
-                        const schemaSpan = deploymentScope.schemaStringValue?.span;
+                        const schemaSpan = deploymentSchema.schemaStringValue?.span;
                         if (schemaSpan) {
                             warning.relatedInformation.push({
                                 location: {
@@ -343,6 +349,7 @@ export class DeploymentTemplateDoc extends DeploymentDocument {
     private getMissingParameterErrors(): Issue[] {
         const errors: Issue[] = [];
 
+        //asdfasdf; handle; linked; scopes; differently ?;
         for (const scope of this.uniqueScopes) { //asdf are linked files a unique scope?  Probably yes
             if (scope.parameterValuesSource) {
                 const scopeErrors = getMissingParameterErrors(scope.parameterValuesSource, scope);

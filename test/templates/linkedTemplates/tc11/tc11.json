@@ -1,5 +1,5 @@
 {
-    // "missing and extra parameters (validation)"
+    // "Missing parameters - no 'parameters' object under linked template parameters"
 
     "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
     "contentVersion": "1.0.0.0",
@@ -8,8 +8,7 @@
     "functions": [],
     "variables": {
         "v1": 123,
-        "v2": 321,
-        "v3": 456
+        "v2": 321
     },
     "resources": [
         {
@@ -18,21 +17,12 @@
             "apiVersion": "2019-10-01",
             "properties": {
                 "mode": "Incremental",
+                    // ERROR: Missing values for stringParam and intParam (there's no 'parameters' object)
                 "templateLink": {
                     "relativePath": "subfolder/child.json"
-                },
-                "parameters": {
-                    // ERROR: Missing value for stringParam
-                    "intParam": {
-                        "value": "[variables('v1')]"
-                    },
-                    // ERROR: Invalid parameter (not defined in the linked template)
-                    "extraParam": {
-                        "value": "[variables('v2')]"
-                    }
-                }
+                } 
             }
-        }
+        }    
     ],
     "outputs": {}
 }

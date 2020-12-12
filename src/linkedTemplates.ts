@@ -6,13 +6,13 @@
 import * as path from 'path';
 import { TextDocument, Uri, workspace } from "vscode";
 import { callWithTelemetryAndErrorHandling, IActionContext, parseError, TelemetryProperties } from "vscode-azureextensionui";
-import { deploymentsResourceTypeLC, templateKeys } from './constants';
 import { DeploymentTemplateDoc } from './documents/templates/DeploymentTemplateDoc';
 import { LinkedTemplateScope } from './documents/templates/scopes/templateScopes';
 import { Errorish } from './Errorish';
 import { ext } from "./extensionVariables";
 import { assert } from './fixed_assert';
 import { ILinkedTemplateReference } from './ILinkedTemplateReference';
+import { ContainsBehavior } from "./language/Span";
 import { NormalizedMap } from './util/NormalizedMap';
 import { normalizePath } from './util/normalizePath';
 import { ofType } from './util/ofType';
@@ -44,6 +44,7 @@ enum PathType {
 export interface INotifyTemplateGraphArgs {
     rootTemplateUri: string;
     linkedTemplates: ILinkedTemplateReference[];
+    fullValidationEnabled: boolean;
 }
 
 /**
@@ -173,28 +174,39 @@ export function assignTemplateGraphToDeploymentTemplate(
 
     // Clear current
     const linkedScopes = ofType(dt.allScopes, LinkedTemplateScope);
-    for (const linkedScope of linkedScopes) {
-        //asdf await linkedScope.setLinkedFileReferences(undefined);
-    }
+    // for (const linkedScope of linkedScopes) {
+    //     //asdf await linkedScope.setLinkedFileReferences(undefined);
+    // }
 
     for (const linkReference of graph.linkedTemplates) {
-        const pc = dt.getContextFromDocumentLineAndColumnIndexes(linkReference.lineNumberInParent, linkReference.columnNumberInParent, undefined, true);
-        const enclosingResource = pc.getEnclosingResource();
-        if (enclosingResource) {
-            if (enclosingResource.getPropertyValue(templateKeys.resourceType)?.asStringValue?.unquotedValue.toLowerCase() === deploymentsResourceTypeLC) {
-                // It's a deployment resource - get the "templateLink" object, that's the root object of any linked template deployment
-                const templateLinkObjectValue = enclosingResource
-                    .getPropertyValue(templateKeys.properties)?.asObjectValue
-                    ?.getPropertyValue(templateKeys.linkedDeploymentTemplateLink)?.asObjectValue;
-                const matchingScope = linkedScopes.find(scope => scope.rootObject === templateLinkObjectValue);
-                if (matchingScope instanceof LinkedTemplateScope) {
-                    // Found it
+        const linkPositionInTemplate = dt.getDocumentCharacterIndex(linkReference.lineNumberInParent, linkReference.lineNumberInParent);
 
-                    //asdf reentrancy - precalculate?  No need to set param values source multiple times for COPY loop
-                    //matchingScope.linkedFileReferences?.push(linkReference);
-                    matchingScope.setLinkedFileReferences([linkReference], loadedTemplates);
-                }
-            }
+        // Since templated deployments can't have children (in the defining document), there can be at most linked deployment scopes whose defining
+        //   resource contains the location
+        const matchingScope = linkedScopes.find(scope => scope.owningDeploymentResource.span.contains(linkPositionInTemplate, ContainsBehavior.enclosed));
+        if (matchingScope) {
+            //asdf reentrancy - precalculate?  No need to set param values source multiple times for COPY loop
+            //matchingScope.linkedFileReferences?.push(linkReference);
+            matchingScope.setLinkedFileReferences([linkReference], loadedTemplates);
         }
+
+        //asdf
+        // const pc = dt.getContextFromDocumentLineAndColumnIndexes(linkReference.lineNumberInParent, linkReference.columnNumberInParent, undefined, true);
+        // const enclosingResource = pc.getEnclosingResource();
+        // if (enclosingResource) {
+        //     if (enclosingResource.getPropertyValue(templateKeys.resourceType)?.asStringValue?.unquotedValue.toLowerCase() === deploymentsResourceTypeLC) {
+        //         // It's a deployment resource - get the "templateLink" object, that's the root object of any linked template deployment
+        //         const templateLinkObjectValue = enclosingResource
+        //             .getPropertyValue(templateKeys.properties)?.asObjectValue
+        //             ?.getPropertyValue(templateKeys.linkedDeploymentTemplateLink)?.asObjectValue;
+        //         const matchingScope = linkedScopes.find(scope => scope.rootObject === templateLinkObjectValue);
+        //         if (matchingScope instanceof LinkedTemplateScope) {
+        //             // Found it
+
+        //             //asdf reentrancy - precalculate?  No need to set param values source multiple times for COPY loop
+        //             //matchingScope.linkedFileReferences?.push(linkReference);
+        //             matchingScope.setLinkedFileReferences([linkReference], loadedTemplates);
+        //         }
+        //     }
     }
 }

@@ -6,7 +6,7 @@
 import * as Json from "../../../language/json/JSON";
 import { ISchemaInfo } from "../ISchemaInfo";
 
-export interface IDeploymentScopeReference {
+export interface IDeploymentSchemaReference {
     schemaStringValue: Json.StringValue | undefined;
     matchingInfo: ISchemaInfo | undefined;
 }
