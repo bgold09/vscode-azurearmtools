@@ -2,14 +2,16 @@
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 // ----------------------------------------------------------------------------
 
+import { LanguageClient } from "vscode-languageclient";
 import { ext, LanguageServerState } from "../../extension.bundle";
+import { assert } from "../../src/fixed_assert";
 import { DISABLE_LANGUAGE_SERVER } from "../testConstants";
 import { delay } from "./delay";
 import { testLog } from "./testLog";
 
 let isLanguageServerAvailable = false;
 
-export async function ensureLanguageServerAvailable(): Promise<void> {
+export async function ensureLanguageServerAvailable(): Promise<LanguageClient> {
     if (DISABLE_LANGUAGE_SERVER) {
         throw new Error("DISABLE_LANGUAGE_SERVER is set, but this test is trying to call ensureLanguageServerAvailable");
     }
@@ -17,7 +19,7 @@ export async function ensureLanguageServerAvailable(): Promise<void> {
     if (!isLanguageServerAvailable) {
         testLog.writeLine("Waiting for language server to be available");
         // tslint:disable-next-line: no-constant-condition
-        while (true) {
+        while (!isLanguageServerAvailable) {
             switch (ext.languageServerState) {
                 case LanguageServerState.Failed:
                     throw new Error(`Language server failed on start-up`);
@@ -30,7 +32,8 @@ export async function ensureLanguageServerAvailable(): Promise<void> {
 
                     isLanguageServerAvailable = true;
                     testLog.writeLine("Language server now available");
-                    return;
+                    break;
+
                 case LanguageServerState.Stopped:
                     throw new Error('Language server stopped');
                 default:
@@ -38,4 +41,7 @@ export async function ensureLanguageServerAvailable(): Promise<void> {
             }
         }
     }
+
+    assert(ext.languageServerClient);
+    return ext.languageServerClient;
 }

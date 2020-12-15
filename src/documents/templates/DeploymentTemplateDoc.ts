@@ -65,6 +65,7 @@ const resourceTypesNotAllowedInRGDeployments: string[] = [
     "Microsoft.Resources/resourceGroups",
     "Microsoft.ManagedNetwork/scopeAssignments",
     "Microsoft.Management/managementGroups",
+    "Microsoft.Subscription/aliases",
 ];
 const resourceTypesNotAllowedInRGDeploymentsLC: string[] = resourceTypesNotAllowedInRGDeployments.map(resType => resType.toLowerCase());
 

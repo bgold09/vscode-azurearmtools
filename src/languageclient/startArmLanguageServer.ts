@@ -15,6 +15,7 @@ import { templateDocumentSelector } from '../documents/templates/supported';
 import { ext } from '../extensionVariables';
 import { assert } from '../fixed_assert';
 import { INotifyTemplateGraphArgs, IRequestOpenLinkedFileArgs, onRequestOpenLinkedFile } from '../linkedTemplates';
+import { assertNever } from '../util/assertNever';
 import { WrappedErrorHandler } from './WrappedErrorHandler';
 
 const languageServerDllName = 'Microsoft.ArmLanguageServer.dll';
@@ -54,6 +55,21 @@ export async function stopArmLanguageServer(): Promise<void> {
 }
 
 export function startArmLanguageServerInBackground(): void {
+    switch (ext.languageServerState) {
+        case LanguageServerState.Started:
+        case LanguageServerState.Starting:
+            // Nothing to do
+            return;
+
+        case LanguageServerState.Failed:
+        case LanguageServerState.NotStarted:
+        case LanguageServerState.Stopped:
+            break;
+
+        default:
+            assertNever(ext.languageServerState);
+    }
+
     window.withProgress(
         {
             location: ProgressLocation.Window,

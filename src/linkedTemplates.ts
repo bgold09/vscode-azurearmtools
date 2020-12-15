@@ -62,7 +62,7 @@ export async function onRequestOpenLinkedFile({ sourceTemplateUri, requestedLink
         // properties.openResult = 'Error';
 
         const result = await tryOpenLinkedFile(requestedLinkResolvedUri, pathType);
-        return { loadErrorMessage: parseError(result.loadError).message };
+        return { loadErrorMessage: result.loadError ? parseError(result.loadError).message : undefined };
 
         //asdf
         // if (result.document) {

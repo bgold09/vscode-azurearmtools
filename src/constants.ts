@@ -55,6 +55,17 @@ export namespace configKeys {
 export namespace notifications {
     export const requestOpenLinkedTemplate = 'arm-template/requestOpenLinkedTemplate';
     export const notifyTemplateGraph = 'arm-template/notifyTemplateGraph';
+
+    export namespace Diagnostics {
+        export const codeAnalysisStarting = 'arm-template/diag-codeAnalysisStarting';
+
+        export interface ICodeAnalysisStartingArgs {
+            uri: string;
+            docVersion: number;
+            codeAnalysisVersion: number;
+
+        }
+    }
 }
 
 export namespace globalStateKeys {

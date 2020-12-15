@@ -7,7 +7,10 @@
 import * as assert from "assert";
 import { Uri } from "vscode";
 import { parseError } from "vscode-azureextensionui";
+import { notifications } from "../../src/constants";
+import { startArmLanguageServerInBackground } from "../../src/languageclient/startArmLanguageServer";
 import { ExpectedDiagnostics, IExpectedDiagnostic, testDiagnostics, testDiagnosticsFromUri } from "../support/diagnostics";
+import { ensureLanguageServerAvailable } from "../support/ensureLanguageServerAvailable";
 import { resolveInTestFolder } from "../support/resolveInTestFolder";
 import { testLog } from "../support/testLog";
 import { testWithLanguageServerAndRealFunctionMetadata } from "../support/testWithLanguageServer";
@@ -59,6 +62,12 @@ suite("Linked templates functional tests", () => {
                 const templateContentsOrFilename = options.mainTemplateFile;
                 assert(templateContentsOrFilename);
                 assert(options.mainParametersFile);
+
+                startArmLanguageServerInBackground();
+                const client = await ensureLanguageServerAvailable();
+                client.onNotification(notifications.Diagnostics.codeAnalysisStarting, async (args: notifications.Diagnostics.ICodeAnalysisStartingArgs) => {
+                    testLog.writeLine(JSON.stringify(args, null, 2));
+                });
 
                 // Open and test diagnostics for the main template file
                 testLog.writeLine("Testing diagnostics in main template.");
