@@ -39,7 +39,7 @@ import { isArmSchema } from './schemas';
 import { DeploymentScopeKind } from './scopes/DeploymentScopeKind';
 import { IDeploymentSchemaReference } from './scopes/IDeploymentSchemaReference';
 import { TemplateScope } from "./scopes/TemplateScope";
-import { LinkedTemplateScope, NestedTemplateOuterScope, TopLevelTemplateScope } from './scopes/templateScopes';
+import { IChildDeploymentScope, LinkedTemplateScope, NestedTemplateOuterScope, TopLevelTemplateScope } from './scopes/templateScopes';
 import { UserFunctionParameterDefinition } from './UserFunctionParameterDefinition';
 
 export interface IScopedParseResult {
@@ -213,15 +213,9 @@ export class DeploymentTemplateDoc extends DeploymentDocument {
         const warnings: Issue[] = [];
         const referenceListsMap = this.allReferences.referenceListsMap;
 
-        for (const scope of this.uniqueScopes) {
-            if (scope.isExternal) {
-                // If the scope is external (linked deployment scope), there can be no uses of a
-                // var/param/userfunc in this template
-                continue;
-            }
-
+        for (const scope of this.uniqueNonExternalScopes) { // Don't consider linked templates, they
             // Unused parameters
-            for (const parameterDefinition of scope.parameterDefinitions) { //asdf isExternal?
+            for (const parameterDefinition of scope.parameterDefinitions) {
                 if (!referenceListsMap.has(parameterDefinition)) {
                     const message = parameterDefinition instanceof UserFunctionParameterDefinition
                         ? `User-function parameter '${parameterDefinition.nameValue.toString()}' is never used.`
@@ -715,6 +709,11 @@ export class DeploymentTemplateDoc extends DeploymentDocument {
 
         const lenses: ResolvableCodeLens[] = [];
 
+        if (uniqueScope.isExternal) {
+            // External parameter definitions (e.g. linked templates)
+            return [];
+        }
+
         // Code lens for the top-level "parameters" section itself - indicates where the parameters are coming from
         if (uniqueScope instanceof TopLevelTemplateScope) {
             // Top level
@@ -744,21 +743,26 @@ export class DeploymentTemplateDoc extends DeploymentDocument {
     private getChildTemplateCodeLenses(): ResolvableCodeLens[] {
         const lenses: ResolvableCodeLens[] = [];
         for (let scope of this.allScopes) {
-            if (scope.rootObject) {
+            const owningDeploymentResource = (<Partial<IChildDeploymentScope>>scope).owningDeploymentResource; //asdf
+            if (scope.rootObject || owningDeploymentResource) {
                 switch (scope.scopeKind) {
                     case TemplateScopeKind.NestedDeploymentWithInnerScope:
                     case TemplateScopeKind.NestedDeploymentWithOuterScope:
-                        const lens = NestedTemplateCodeLen.create(scope, scope.rootObject.span);
-                        if (lens) {
-                            lenses.push(lens);
+                        if (scope.rootObject) { //asdf
+                            const lens = NestedTemplateCodeLen.create(scope, scope.rootObject.span);
+                            if (lens) {
+                                lenses.push(lens);
+                            }
                         }
                         break;
                     case TemplateScopeKind.LinkedDeployment:
-                        lenses.push(
-                            LinkedTemplateCodeLens.create(
-                                scope,
-                                scope.rootObject.span,
-                                (<LinkedTemplateScope>scope).linkedFileReferences));
+                        if (owningDeploymentResource) { //asdf
+                            lenses.push(
+                                LinkedTemplateCodeLens.create(
+                                    scope,
+                                    owningDeploymentResource?.span, //asdf?
+                                    (<LinkedTemplateScope>scope).linkedFileReferences));
+                        }
                         break;
                     default:
                         break;
@@ -774,6 +778,14 @@ export class DeploymentTemplateDoc extends DeploymentDocument {
      */
     public get uniqueScopes(): TemplateScope[] {
         return this.allScopes.filter(scope => scope.hasUniqueParamsVarsAndFunctions);
+    }
+
+    /**
+     * Returns all scopes which actually host unique members and whose members are not defined
+     * external (linked templates)
+     */
+    public get uniqueNonExternalScopes(): TemplateScope[] {
+        return this.allScopes.filter(scope => scope.hasUniqueParamsVarsAndFunctions && !scope.isExternal);
     }
 
     /**

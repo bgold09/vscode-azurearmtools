@@ -115,7 +115,7 @@ export abstract class TemplateScope implements IParameterDefinitionsSource {
         return undefined;
     }
 
-    public get parameterDefinitions(): IParameterDefinition[] {
+    public get parameterDefinitions(): IParameterDefinition[] { // externalParameterDefinitions??
         return this._parameterDefinitions.getOrCacheValue(() => this.getParameterDefinitions())
             ?? [];
     }

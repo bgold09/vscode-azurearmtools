@@ -10,7 +10,7 @@ import { ExpressionType } from "../templates/ExpressionType";
 /**
  * This class represents the definition of any kind of parameter in a deployment template.
  */
-export interface IParameterDefinition extends INamedDefinition {
+export interface IParameterDefinition extends INamedDefinition { //asdf should the concept of external be here instead of in scope?
     nameValue: Json.StringValue;
 
     // tslint:disable-next-line:no-reserved-keywords
