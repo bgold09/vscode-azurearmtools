@@ -8,7 +8,9 @@ import * as assert from "assert";
 import { Uri } from "vscode";
 import { parseError } from "vscode-azureextensionui";
 import { notifications } from "../../src/constants";
-import { startArmLanguageServerInBackground } from "../../src/languageclient/startArmLanguageServer";
+import { LinkedFileLoadState } from "../../src/ILinkedTemplateReference";
+import { notifyTemplateGraphAvailable, startArmLanguageServerInBackground } from "../../src/languageclient/startArmLanguageServer";
+import { assertNever } from "../../src/util/assertNever";
 import { ExpectedDiagnostics, IExpectedDiagnostic, testDiagnostics, testDiagnosticsFromUri } from "../support/diagnostics";
 import { ensureLanguageServerAvailable } from "../support/ensureLanguageServerAvailable";
 import { resolveInTestFolder } from "../support/resolveInTestFolder";
@@ -35,6 +37,52 @@ suite("Linked templates functional tests", () => {
         }
     }
 
+    async function waitForGraphAvailable(mainTemplate: string, childTemplate: string): Promise<void> {
+        // tslint:disable-next-line: typedef promise-must-complete // false positive
+        await new Promise(resolve => {
+            const disposable = notifyTemplateGraphAvailable(e => { // asdf refactor
+                if (Uri.parse(e.rootTemplateUri).fsPath === mainTemplate) {
+                    testLog.writeLine(`Graph notification available for ${mainTemplate}... Looking for child ${childTemplate}`);
+                    const child = e.linkedTemplates.find(lt => Uri.parse(lt.fullUri).fsPath === childTemplate);
+                    let ready: boolean;
+                    if (child) {
+                        switch (child.loadState) {
+                            case LinkedFileLoadState.Loading:
+                            case LinkedFileLoadState.NotLoaded:
+                                testLog.writeLine(`...${child.originalPath}: load state = ${child.loadState}, therefore not ready yet`);
+                                // Still loading
+                                ready = false;
+                                break;
+
+                            case LinkedFileLoadState.LoadFailed:
+                            case LinkedFileLoadState.NotSupported:
+                            case LinkedFileLoadState.SuccessfullyLoaded:
+                            case LinkedFileLoadState.TooDeep:
+                                testLog.writeLine(`...${child.originalPath}: load state = ${child.loadState} => READY`);
+                                // Load completed or succeeded
+                                ready = true;
+                                break;
+
+                            default:
+                                assertNever(child.loadState);
+                        }
+                    } else {
+                        ready = false;
+                        testLog.writeLine(`... child not found in graph`);
+                    }
+
+                    if (ready) {
+                        testLog.writeLine(`...READY`);
+                        disposable.dispose();
+                        resolve();
+                    } else {
+                        testLog.writeLine(`... not ready`);
+                    }
+                }
+            });
+        });
+    }
+
     // <TC> in strings will be replaced with ${testCase}
     function createLinkedTemplateTest(
         testCase: string,
@@ -49,6 +97,7 @@ suite("Linked templates functional tests", () => {
             waitForDiagnosticSubstring?: string;
 
             linkedTemplates: {
+                parentTemplateFile: string;
                 linkedTemplateFile: string;
                 expected: ExpectedDiagnostics;
                 // If specified, wait for a diagnostic to match the following substring between continuing with checks
@@ -59,23 +108,41 @@ suite("Linked templates functional tests", () => {
         testWithLanguageServerAndRealFunctionMetadata(
             `${testCase} ${testDescription}`,
             async () => {
-                const templateContentsOrFilename = options.mainTemplateFile;
-                assert(templateContentsOrFilename);
+                const mainTemplatePath = resolveInTestFolder(tcString(options.mainTemplateFile, testCase));
+                assert(mainTemplatePath);
                 assert(options.mainParametersFile);
 
                 startArmLanguageServerInBackground();
                 const client = await ensureLanguageServerAvailable();
                 client.onNotification(notifications.Diagnostics.codeAnalysisStarting, async (args: notifications.Diagnostics.ICodeAnalysisStartingArgs) => {
-                    testLog.writeLine(JSON.stringify(args, null, 2));
+                    testLog.writeLine(JSON.stringify(args, null, 2)); //asdfasdf remove
                 });
+
+                // Create promise to wait for child graphs to be available
+                let waitForChildPromises: Promise<unknown>[] = [];
+                for (const expectedLinkedTemplate of options.linkedTemplates) {
+                    // Wait for child template's graph to be available
+                    const childPath = resolveInTestFolder(tcString(expectedLinkedTemplate.linkedTemplateFile, testCase));
+                    const parentPath = resolveInTestFolder(tcString(expectedLinkedTemplate.parentTemplateFile, testCase));
+                    waitForChildPromises.push(waitForGraphAvailable(parentPath, childPath));
+                }
+                const waitAllForChildPromises = Promise.all(waitForChildPromises);
 
                 // Open and test diagnostics for the main template file
                 testLog.writeLine("Testing diagnostics in main template.");
+                // tslint:disable-next-line: no-any
                 await testDiagnostics(
-                    tcString(templateContentsOrFilename, testCase),
+                    mainTemplatePath,
                     {
                         parametersFile: tcString(options.mainParametersFile, testCase),
-                        waitForDiagnosticSubstring: options.waitForDiagnosticSubstring,
+                        waitForDiagnosticsFilter: async (results): Promise<boolean> => {
+                            await waitAllForChildPromises; //asdf?  better way to do this than awaiting here?
+                            if (options.waitForDiagnosticSubstring) {
+                                // tslint:disable-next-line: no-non-null-assertion
+                                return results.diagnostics.some(d => d.message.includes(options.waitForDiagnosticSubstring!));
+                            }
+                            return true;
+                        }
                     },
                     tcDiagnostics(options.mainTemplateExpected, testCase)
                 );
@@ -91,7 +158,13 @@ suite("Linked templates functional tests", () => {
                         await testDiagnosticsFromUri(
                             childUri,
                             {
-                                waitForDiagnosticSubstring: linkedTemplate.waitForDiagnosticSubstring
+                                waitForDiagnosticsFilter: (results): boolean => {
+                                    if (linkedTemplate.waitForDiagnosticSubstring) {
+                                        // tslint:disable-next-line: no-non-null-assertion
+                                        return results.diagnostics.some(d => d.message.includes(linkedTemplate.waitForDiagnosticSubstring!));
+                                    }
+                                    return true;
+                                }
                             },
                             tcDiagnostics(linkedTemplate.expected, testCase)
                         );
@@ -115,6 +188,7 @@ suite("Linked templates functional tests", () => {
             ],
             linkedTemplates: [
                 {
+                    parentTemplateFile: "templates/linkedTemplates/<TC>/<TC>.json",
                     linkedTemplateFile: "templates/linkedTemplates/<TC>/subfolder/child.json",
                     expected: [
                         "Error: Undefined parameter reference: 'p3string-whoops' (arm-template (expressions)) [26,38]"
@@ -126,7 +200,7 @@ suite("Linked templates functional tests", () => {
 
     createLinkedTemplateTest(
         "tc02",
-        "error: child not found",
+        "expecting error: child not found",
         {
             mainTemplateFile: "templates/linkedTemplates/<TC>/<TC>.json",
             mainParametersFile: "<TC>.parameters.json",
@@ -158,7 +232,7 @@ suite("Linked templates functional tests", () => {
             ],
             linkedTemplates: [
                 {
-
+                    parentTemplateFile: "templates/linkedTemplates/<TC>/<TC>.json",
                     linkedTemplateFile: "templates/linkedTemplates/<TC>/subfolder/child.json",
                     expected: [
                         "Error: Undefined parameter reference: 'p3string-whoops' (arm-template (expressions)) [26,38]"
@@ -239,7 +313,7 @@ suite("Linked templates functional tests", () => {
             ],
             linkedTemplates: [
                 {
-
+                    parentTemplateFile: "templates/linkedTemplates/<TC>/<TC>.json",
                     linkedTemplateFile: "templates/linkedTemplates/<TC>/subfolder/child.json",
                     expected: [
                         "Warning: The parameter 'intParam' is never used. (arm-template (expressions)) [12,9-12,19]",
@@ -263,6 +337,7 @@ suite("Linked templates functional tests", () => {
             ],
             linkedTemplates: [
                 {
+                    parentTemplateFile: "templates/linkedTemplates/<TC>/<TC>.json",
                     linkedTemplateFile: "templates/linkedTemplates/<TC>/subfolder/child1.json",
                     expected: [
                         // tslint:disable-next-line: no-suspicious-comment
@@ -289,6 +364,7 @@ suite("Linked templates functional tests", () => {
             ],
             linkedTemplates: [
                 {
+                    parentTemplateFile: "templates/linkedTemplates/<TC>/<TC>.json",
                     linkedTemplateFile: "templates/linkedTemplates/<TC>/subfolder/child1.json",
                     expected: [
                         // tslint:disable-next-line: no-suspicious-comment
@@ -297,10 +373,10 @@ suite("Linked templates functional tests", () => {
 
                         "Warning: The variable 'unusedVar' is never used. (arm-template (expressions)) [5,9]",
                         "Error: Template validation failed: Template parameter JToken type is not valid. Expected 'Integer'. Actual 'String'. Please see https://aka.ms/arm-deploy/#parameter-file for usage details. (arm-template (validation)) [25,21] [The error occurred in a nested template near here] [25,21]",
-                    ],
-                    waitForDiagnosticSubstring: "Template validation failed"
+                    ]
                 },
                 {
+                    parentTemplateFile: "templates/linkedTemplates/<TC>/subfolder/child1.json",
                     linkedTemplateFile: "templates/linkedTemplates/<TC>/subfolder/child2.json",
                     expected: [
                         "Warning: The parameter 'intParam' is never used. (arm-template (expressions)) [12,9-12,19]",
@@ -329,6 +405,7 @@ suite("Linked templates functional tests", () => {
             waitForDiagnosticSubstring: "Template validation failed",
             linkedTemplates: [
                 {
+                    parentTemplateFile: "templates/linkedTemplates/<TC>/<TC>.json",
                     linkedTemplateFile: "templates/linkedTemplates/<TC>/subfolder/child.json",
                     expected: [
                         'Warning: Missing required property "uri" (arm-template (schema)) [16,17-16,31]',
@@ -357,8 +434,10 @@ suite("Linked templates functional tests", () => {
 
                     "Warning: The variable 'v3' is never used. (arm-template (expressions))",
                 ],
+                waitForDiagnosticSubstring: 'Template validation failed',
                 linkedTemplates: [
                     {
+                        parentTemplateFile: "templates/linkedTemplates/<TC>/<TC>.json",
                         linkedTemplateFile: "templates/linkedTemplates/<TC>/subfolder/child.json",
                         expected: [
                             'Warning: Missing required property "uri" (arm-template (schema)) [19,17-19,31]',
@@ -382,8 +461,10 @@ suite("Linked templates functional tests", () => {
                     "Warning: The variable 'v1' is never used. (arm-template (expressions)) [10,9-10,13]",
                     "Warning: The variable 'v2' is never used. (arm-template (expressions)) [11,9-11,13]"
                 ],
+                waitForDiagnosticSubstring: 'following parameters do not have values',
                 linkedTemplates: [
                     {
+                        parentTemplateFile: "templates/linkedTemplates/<TC>/<TC>.json",
                         linkedTemplateFile: "templates/linkedTemplates/<TC>/subfolder/child.json",
                         expected: [
                             'Warning: Missing required property "uri" (arm-template (schema)) [19,17-19,31]',
@@ -410,6 +491,7 @@ suite("Linked templates functional tests", () => {
                 ],
                 linkedTemplates: [
                     {
+                        parentTemplateFile: "templates/linkedTemplates/<TC>/<TC>.json",
                         linkedTemplateFile: "templates/linkedTemplates/<TC>/subfolder/child.json",
                         expected: [
                             // tslint:disable-next-line: no-suspicious-comment

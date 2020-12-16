@@ -263,8 +263,13 @@ export interface IGetDiagnosticsOptions {
      */
     waitForChange?: boolean;
 
-    // If specified, wait for a diagnostic to match the following substring between continuing with checks
-    waitForDiagnosticSubstring?: string;
+    waitForDiagnosticsFilter?(results: IDiagnosticsResults): boolean | Promise<boolean>;
+
+    //asdf
+    // // If specified, wait for a diagnostic to match the following substring between continuing with checks
+    // waitForDiagnosticSubstring?: string;
+    // // If specified, wait for the promise to complete before continuing with checks
+    // waitForPromise?: Promise<unknown>;
 }
 
 export async function testDiagnosticsFromFile(filePath: string | Partial<IDeploymentTemplate>, options: ITestDiagnosticsOptions, expected: ExpectedDiagnostics): Promise<void> {
@@ -365,13 +370,10 @@ export async function getDiagnosticsForDocument(
             return true;
         }
 
-        function diagnosticsContainWaitMessage(results: IDiagnosticsResults): boolean {
-            if (options.waitForDiagnosticSubstring) {
-                if (results.diagnostics.some(d => d.message.includes(options.waitForDiagnosticSubstring!))) {
-                    return true;
-                } else {
-                    return false;
-                }
+        async function diagnosticsFilterPasses(results: IDiagnosticsResults): Promise<boolean> {
+            if (options.waitForDiagnosticsFilter) {
+                const filterValue = await options.waitForDiagnosticsFilter(results);
+                return filterValue;
             }
 
             return true;
@@ -386,7 +388,7 @@ export async function getDiagnosticsForDocument(
             }
         }
 
-        if (areAllSourcesComplete(currentResults.sourceCompletionVersions) && diagnosticsContainWaitMessage(currentResults)) {
+        if (areAllSourcesComplete(currentResults.sourceCompletionVersions) && await diagnosticsFilterPasses(currentResults)) {
             resolve(currentResults);
             return;
         }
@@ -405,7 +407,7 @@ export async function getDiagnosticsForDocument(
 
         while (!done) {
             const results = getCurrentDiagnostics();
-            if (areAllSourcesComplete(results.sourceCompletionVersions) && diagnosticsContainWaitMessage(results)) {
+            if (areAllSourcesComplete(results.sourceCompletionVersions) && await diagnosticsFilterPasses(results)) {
                 resolve(results);
                 done = true;
             }
